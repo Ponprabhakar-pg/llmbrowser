@@ -387,7 +387,7 @@ class TestTOTP:
         assert tk._totp_secret == "JBSWY3DPEHPK3PXP"
 
     def test_totp_generates_valid_code(self):
-        pyotp = pytest.importorskip("pyotp")
+        import pyotp
         secret = "JBSWY3DPEHPK3PXP"
         tk = BrowserToolkit(_FakeBrowser(), totp_secret=secret)
         # get_totp_code is async — run it synchronously via asyncio

@@ -8,88 +8,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "agentbrowse"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "playwright" },
-    { name = "py-wraps-data-types" },
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "anthropic", extra = ["bedrock"] },
-    { name = "google-generativeai" },
-    { name = "langchain-core" },
-    { name = "llama-index-core" },
-    { name = "openai" },
-    { name = "pyotp" },
-]
-anthropic = [
-    { name = "anthropic" },
-]
-bedrock = [
-    { name = "anthropic", extra = ["bedrock"] },
-]
-google = [
-    { name = "google-generativeai" },
-]
-langchain = [
-    { name = "langchain-core" },
-]
-llamaindex = [
-    { name = "llama-index-core" },
-]
-openai = [
-    { name = "openai" },
-]
-totp = [
-    { name = "pyotp" },
-]
-
-[package.dev-dependencies]
-benchmark = [
-    { name = "anthropic", extra = ["bedrock"] },
-    { name = "boto3" },
-]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40.0" },
-    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'all'", specifier = ">=0.40.0" },
-    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'bedrock'", specifier = ">=0.40.0" },
-    { name = "google-generativeai", marker = "extra == 'all'", specifier = ">=0.8.0" },
-    { name = "google-generativeai", marker = "extra == 'google'", specifier = ">=0.8.0" },
-    { name = "langchain-core", marker = "extra == 'all'", specifier = ">=0.1.0" },
-    { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.1.0" },
-    { name = "llama-index-core", marker = "extra == 'all'", specifier = ">=0.10.0" },
-    { name = "llama-index-core", marker = "extra == 'llamaindex'", specifier = ">=0.10.0" },
-    { name = "openai", marker = "extra == 'all'", specifier = ">=1.0.0" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0.0" },
-    { name = "playwright", specifier = ">=1.40.0" },
-    { name = "py-wraps-data-types", specifier = ">=0.1.1" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pyotp", marker = "extra == 'all'", specifier = ">=2.9.0" },
-    { name = "pyotp", marker = "extra == 'totp'", specifier = ">=2.9.0" },
-]
-provides-extras = ["anthropic", "openai", "google", "bedrock", "langchain", "llamaindex", "totp", "all"]
-
-[package.metadata.requires-dev]
-benchmark = [
-    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.40.0" },
-    { name = "boto3", specifier = ">=1.34.0" },
-]
-dev = [
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.23.0" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1309,6 +1227,84 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/bb/21/0357ededbc3aead4d170ba5a7b33345ee45e07f77423367725ef623c08a6/llama_index_workflows-2.15.0.tar.gz", hash = "sha256:06630ca3887b9bf27da776f10e42811aeedf3534591eb654796319ef898d2d7b", size = 81504, upload-time = "2026-02-28T00:02:28.904Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/43/ae0902d0ec6d75b6724f8db8de7cebaac7b2e7d285d31ac5f58279973d9b/llama_index_workflows-2.15.0-py3-none-any.whl", hash = "sha256:31634e32dcc2ec248b8c4a03d54c98a8e87cefce641edd573bdbd548d89f3c0c", size = 104367, upload-time = "2026-02-28T00:02:27.074Z" },
+]
+
+[[package]]
+name = "llmbrowser"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "playwright" },
+    { name = "py-wraps-data-types" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic", extra = ["bedrock"] },
+    { name = "google-generativeai" },
+    { name = "langchain-core" },
+    { name = "llama-index-core" },
+    { name = "openai" },
+    { name = "pyotp" },
+]
+anthropic = [
+    { name = "anthropic" },
+]
+bedrock = [
+    { name = "anthropic", extra = ["bedrock"] },
+]
+google = [
+    { name = "google-generativeai" },
+]
+langchain = [
+    { name = "langchain-core" },
+]
+llamaindex = [
+    { name = "llama-index-core" },
+]
+openai = [
+    { name = "openai" },
+]
+
+[package.dev-dependencies]
+benchmark = [
+    { name = "anthropic", extra = ["bedrock"] },
+    { name = "boto3" },
+]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40.0" },
+    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'all'", specifier = ">=0.40.0" },
+    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'bedrock'", specifier = ">=0.40.0" },
+    { name = "google-generativeai", marker = "extra == 'all'", specifier = ">=0.8.0" },
+    { name = "google-generativeai", marker = "extra == 'google'", specifier = ">=0.8.0" },
+    { name = "langchain-core", marker = "extra == 'all'", specifier = ">=0.1.0" },
+    { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.1.0" },
+    { name = "llama-index-core", marker = "extra == 'all'", specifier = ">=0.10.0" },
+    { name = "llama-index-core", marker = "extra == 'llamaindex'", specifier = ">=0.10.0" },
+    { name = "openai", marker = "extra == 'all'", specifier = ">=1.0.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0.0" },
+    { name = "playwright", specifier = ">=1.40.0" },
+    { name = "py-wraps-data-types", specifier = ">=0.1.1" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyotp", marker = "extra == 'all'", specifier = ">=2.9.0" },
+]
+provides-extras = ["anthropic", "openai", "google", "bedrock", "langchain", "llamaindex", "totp", "all"]
+
+[package.metadata.requires-dev]
+benchmark = [
+    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.40.0" },
+    { name = "boto3", specifier = ">=1.34.0" },
+]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
 ]
 
 [[package]]
