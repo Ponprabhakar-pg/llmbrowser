@@ -1266,6 +1266,9 @@ llamaindex = [
 openai = [
     { name = "openai" },
 ]
+totp = [
+    { name = "pyotp" },
+]
 
 [package.dev-dependencies]
 benchmark = [
@@ -1294,6 +1297,7 @@ requires-dist = [
     { name = "py-wraps-data-types", specifier = ">=0.1.1" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyotp", marker = "extra == 'all'", specifier = ">=2.9.0" },
+    { name = "pyotp", marker = "extra == 'totp'", specifier = ">=2.9.0" },
 ]
 provides-extras = ["anthropic", "openai", "google", "bedrock", "langchain", "llamaindex", "totp", "all"]
 

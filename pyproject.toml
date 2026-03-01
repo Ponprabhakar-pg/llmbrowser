@@ -28,7 +28,7 @@ google     = ["google-generativeai>=0.8.0"]
 bedrock    = ["anthropic[bedrock]>=0.40.0"]
 langchain  = ["langchain-core>=0.1.0"]
 llamaindex = ["llama-index-core>=0.10.0"]
-totp       = []
+totp       = ["pyotp>=2.9.0"]
 all        = [
     "anthropic[bedrock]>=0.40.0",
     "openai>=1.0.0",
