@@ -1,0 +1,359 @@
+[
+  {
+    "id": "wiki-001",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org, search for 'Python programming language', and return the year it was first released.",
+    "expected_contains": ["1991"],
+    "max_steps": 15
+  },
+  {
+    "id": "wiki-002",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org and find the population of Tokyo. Return only the number.",
+    "expected_contains": ["14,000", "14,094", "14,09", "13,96", "13,960"],
+    "max_steps": 15
+  },
+  {
+    "id": "wiki-003",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org, search for 'Eiffel Tower', and return its height in meters.",
+    "expected_contains": ["330", "324"],
+    "max_steps": 15
+  },
+  {
+    "id": "wiki-004",
+    "category": "navigation",
+    "task": "Go to en.wikipedia.org, navigate to the 'Featured article' link on the main page, and return the title of the featured article.",
+    "expected_contains": [],
+    "max_steps": 12
+  },
+  {
+    "id": "wiki-005",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org, search for 'OpenAI', and return the year the company was founded.",
+    "expected_contains": ["2015"],
+    "max_steps": 15
+  },
+  {
+    "id": "wiki-006",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org/wiki/Python_(programming_language) and return the name of the person who created Python.",
+    "expected_contains": ["Guido", "van Rossum"],
+    "max_steps": 10
+  },
+  {
+    "id": "wiki-007",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org, search for 'iPhone', and return the year the first iPhone was released.",
+    "expected_contains": ["2007"],
+    "max_steps": 15
+  },
+  {
+    "id": "wiki-008",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org/wiki/JavaScript and return the year JavaScript was first released.",
+    "expected_contains": ["1995"],
+    "max_steps": 10
+  },
+  {
+    "id": "wiki-009",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org/wiki/World_Wide_Web and return the name of the person who invented the World Wide Web.",
+    "expected_contains": ["Berners-Lee", "Tim Berners"],
+    "max_steps": 10
+  },
+  {
+    "id": "wiki-010",
+    "category": "extraction",
+    "task": "Go to en.wikipedia.org/wiki/Linux and return the year Linux was first released.",
+    "expected_contains": ["1991"],
+    "max_steps": 10
+  },
+  {
+    "id": "wiki-table-001",
+    "category": "table",
+    "task": "Go to en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations) and return the name of the #1 most populous country.",
+    "expected_contains": ["India", "China"],
+    "max_steps": 12
+  },
+  {
+    "id": "wiki-table-002",
+    "category": "table",
+    "task": "Go to en.wikipedia.org/wiki/G7 and return the names of all G7 member countries.",
+    "expected_contains": ["United States", "Germany", "Japan"],
+    "max_steps": 12
+  },
+  {
+    "id": "wiki-nav-001",
+    "category": "navigation",
+    "task": "Go to en.wikipedia.org/wiki/Python_(programming_language), find a link to the article about Guido van Rossum, navigate to it, and return his birth year.",
+    "expected_contains": ["1956"],
+    "max_steps": 15
+  },
+  {
+    "id": "hn-001",
+    "category": "extraction",
+    "task": "Go to news.ycombinator.com and return the titles of the top 3 stories.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "hn-002",
+    "category": "extraction",
+    "task": "Go to news.ycombinator.com and return how many points the #1 ranked story has.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "hn-003",
+    "category": "navigation",
+    "task": "Go to news.ycombinator.com, click on 'new' to see the newest stories, and return the title of the first story.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "hn-004",
+    "category": "navigation",
+    "task": "Go to news.ycombinator.com, click on 'ask' to see Ask HN posts, and return the title of the top Ask HN post.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "hn-005",
+    "category": "navigation",
+    "task": "Go to news.ycombinator.com, navigate to page 2, and return the rank number of the first story shown on page 2.",
+    "expected_contains": ["31"],
+    "max_steps": 10
+  },
+  {
+    "id": "gh-001",
+    "category": "extraction",
+    "task": "Go to github.com/trending and return the name of the #1 trending repository today.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "gh-002",
+    "category": "extraction",
+    "task": "Go to github.com/trending and return the programming language of the #1 trending repository.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "gh-003",
+    "category": "navigation",
+    "task": "Go to github.com/trending/python and return the name of the #1 trending Python repository.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "gh-004",
+    "category": "extraction",
+    "task": "Go to github.com/microsoft/vscode and return the primary programming language used in the repository.",
+    "expected_contains": ["TypeScript"],
+    "max_steps": 10
+  },
+  {
+    "id": "pypi-001",
+    "category": "extraction",
+    "task": "Go to pypi.org/project/requests and return the current latest version number.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "pypi-002",
+    "category": "extraction",
+    "task": "Go to pypi.org/project/playwright and return the current latest version number.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "pypi-003",
+    "category": "search",
+    "task": "Go to pypi.org and search for 'browser automation'. Return the name of the first result.",
+    "expected_contains": [],
+    "max_steps": 12
+  },
+  {
+    "id": "pypi-004",
+    "category": "extraction",
+    "task": "Go to pypi.org/project/numpy and return the current latest version number.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "pypi-005",
+    "category": "extraction",
+    "task": "Go to pypi.org/project/pydantic and return the name of the project's author or maintainer.",
+    "expected_contains": ["Samuel", "Pydantic", "pydantic"],
+    "max_steps": 10
+  },
+  {
+    "id": "npm-001",
+    "category": "extraction",
+    "task": "Go to npmjs.com/package/lodash and return the current latest version number.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "npm-002",
+    "category": "extraction",
+    "task": "Go to npmjs.com/package/react and return the current latest version number.",
+    "expected_contains": [],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-001",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'capital of France', and return the answer.",
+    "expected_contains": ["Paris"],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-002",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'speed of light in m/s', and return the value.",
+    "expected_contains": ["299,792,458", "299792458"],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-003",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'tallest mountain in the world', and return its name and height.",
+    "expected_contains": ["Everest", "8,848", "8848", "8,849"],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-004",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'who invented the telephone', and return the inventor's name.",
+    "expected_contains": ["Bell", "Graham Bell"],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-005",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'largest ocean on Earth', and return its name.",
+    "expected_contains": ["Pacific"],
+    "max_steps": 10
+  },
+  {
+    "id": "duck-006",
+    "category": "search",
+    "task": "Go to duckduckgo.com, search for 'boiling point of water in Celsius', and return the value.",
+    "expected_contains": ["100"],
+    "max_steps": 10
+  },
+  {
+    "id": "weather-001",
+    "category": "extraction",
+    "task": "Go to wttr.in/London and return the current temperature shown for London.",
+    "expected_contains": [],
+    "max_steps": 8
+  },
+  {
+    "id": "arxiv-001",
+    "category": "search",
+    "task": "Go to arxiv.org, search for 'attention is all you need', and return the number of authors of the first result.",
+    "expected_contains": [],
+    "max_steps": 12
+  },
+  {
+    "id": "arxiv-002",
+    "category": "extraction",
+    "task": "Go to arxiv.org/abs/1706.03762 and return the full title of the paper.",
+    "expected_contains": ["Attention Is All You Need", "Attention is All You Need"],
+    "max_steps": 8
+  },
+  {
+    "id": "arxiv-003",
+    "category": "extraction",
+    "task": "Go to arxiv.org/abs/1810.04805 and return the title of the paper.",
+    "expected_contains": ["BERT", "Bidirectional"],
+    "max_steps": 8
+  },
+  {
+    "id": "mdn-001",
+    "category": "extraction",
+    "task": "Go to developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map and return what the map() method returns according to the page.",
+    "expected_contains": ["new array", "new Array"],
+    "max_steps": 10
+  },
+  {
+    "id": "mdn-002",
+    "category": "extraction",
+    "task": "Go to developer.mozilla.org/en-US/docs/Web/CSS/display and return the first value listed under the 'Formal syntax' or check if the page describes what the display property does.",
+    "expected_contains": ["display", "element"],
+    "max_steps": 10
+  },
+  {
+    "id": "scroll-001",
+    "category": "scroll",
+    "task": "Go to en.wikipedia.org/wiki/Artificial_intelligence, scroll to the bottom of the page, and return the last section heading you find.",
+    "expected_contains": [],
+    "max_steps": 18
+  },
+  {
+    "id": "scroll-002",
+    "category": "scroll",
+    "task": "Go to en.wikipedia.org/wiki/Python_(programming_language), scroll down until you find the 'Typing' section, and return the first sentence or description you find there.",
+    "expected_contains": ["typ", "duck", "dynamic"],
+    "max_steps": 18
+  },
+  {
+    "id": "multi-001",
+    "category": "multi-step",
+    "task": "Go to en.wikipedia.org, search for 'Claude Shannon', find when he was born, then search for 'Alan Turing' and find when he was born. Return both birth years.",
+    "expected_contains": ["1916", "1912"],
+    "max_steps": 25
+  },
+  {
+    "id": "multi-002",
+    "category": "multi-step",
+    "task": "Go to en.wikipedia.org/wiki/Python_(programming_language), find who created Python, then navigate to that person's Wikipedia article and return their birth year.",
+    "expected_contains": ["1956"],
+    "max_steps": 20
+  },
+  {
+    "id": "multi-003",
+    "category": "multi-step",
+    "task": "Go to pypi.org/project/requests and note the latest version. Then go to pypi.org/project/httpx and note its latest version. Return both version numbers.",
+    "expected_contains": [],
+    "max_steps": 15
+  },
+  {
+    "id": "multi-004",
+    "category": "multi-step",
+    "task": "Go to news.ycombinator.com and find the #1 story. Then go to the comments page for that story and return the total number of comments.",
+    "expected_contains": [],
+    "max_steps": 15
+  },
+  {
+    "id": "so-001",
+    "category": "extraction",
+    "task": "Go to stackoverflow.com/questions?tab=votes and return the title of the highest voted question of all time.",
+    "expected_contains": ["sorted array", "Git", "undo", "git"],
+    "max_steps": 12
+  },
+  {
+    "id": "so-002",
+    "category": "navigation",
+    "task": "Go to stackoverflow.com, search for 'python list comprehension', and return the title of the first search result.",
+    "expected_contains": [],
+    "max_steps": 12
+  },
+  {
+    "id": "count-001",
+    "category": "count",
+    "task": "Go to news.ycombinator.com and count how many stories are listed on the front page. Return the number.",
+    "expected_contains": ["30"],
+    "max_steps": 10
+  },
+  {
+    "id": "count-002",
+    "category": "count",
+    "task": "Go to en.wikipedia.org/wiki/G7 and return how many member countries the G7 has.",
+    "expected_contains": ["7", "seven"],
+    "max_steps": 10
+  }
+]

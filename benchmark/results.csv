@@ -1,0 +1,66 @@
+task_id,category,success,correct,steps,input_tokens,output_tokens,total_tokens,elapsed_s,answer,task,error
+wiki-001,extraction,True,True,13,348040,1372,349412,48.1,1991,"Go to en.wikipedia.org, search for 'Python programming language', and return the year it was first released.",
+wiki-002,extraction,True,False,13,325607,1588,327195,67.11,"14,000,000",Go to en.wikipedia.org and find the population of Tokyo. Return only the number.,
+wiki-003,extraction,True,True,13,265226,1602,266828,61.84,"The height of the Eiffel Tower is 330 meters (including antennas) or 300 meters (to the architectural top, excluding antennas).","Go to en.wikipedia.org, search for 'Eiffel Tower', and return its height in meters.",
+wiki-004,navigation,True,True,3,18432,359,18791,11.68,High and Low (1963 film),"Go to en.wikipedia.org, navigate to the 'Featured article' link on the main page, and return the title of the featured article.",
+wiki-005,extraction,True,True,13,339205,1562,340767,63.38,2015,"Go to en.wikipedia.org, search for 'OpenAI', and return the year the company was founded.",
+wiki-006,extraction,True,True,2,8425,226,8651,7.4,Guido van Rossum,Go to en.wikipedia.org/wiki/Python_(programming_language) and return the name of the person who created Python.,
+wiki-007,extraction,True,True,13,289834,1361,291195,44.83,2007,"Go to en.wikipedia.org, search for 'iPhone', and return the year the first iPhone was released.",
+wiki-008,extraction,True,True,8,128942,1015,129957,66.68,1995,Go to en.wikipedia.org/wiki/JavaScript and return the year JavaScript was first released.,
+wiki-009,extraction,True,True,2,7875,262,8137,7.77,Tim Berners-Lee,Go to en.wikipedia.org/wiki/World_Wide_Web and return the name of the person who invented the World Wide Web.,
+wiki-010,extraction,True,True,8,134499,862,135361,31.01,1991,Go to en.wikipedia.org/wiki/Linux and return the year Linux was first released.,
+wiki-table-001,table,True,True,3,16079,470,16549,12.5,India,Go to en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations) and return the name of the #1 most populous country.,
+wiki-table-002,table,True,True,3,18219,584,18803,14.44,"The G7 member countries are:
+1. Canada
+2. France
+3. Germany
+4. Italy
+5. Japan
+6. United Kingdom
+7. United States",Go to en.wikipedia.org/wiki/G7 and return the names of all G7 member countries.,
+wiki-nav-001,navigation,True,True,13,298108,1675,299783,77.94,1956,"Go to en.wikipedia.org/wiki/Python_(programming_language), find a link to the article about Guido van Rossum, navigate to it, and return his birth year.",
+hn-001,extraction,True,True,2,10511,368,10879,9.52,"The top 3 stories on Hacker News are:
+
+1. Microgpt
+2. We do not think Anthropic should be designated as
+3. 10-202: Introduction to Modern AI (CMU)",Go to news.ycombinator.com and return the titles of the top 3 stories.,
+hn-002,extraction,True,True,6,72514,1202,73716,36.97,"I was unable to determine the exact number of points for the #1 ranked story ""Microgpt"" on Hacker News. While I successfully identified it as story ID 47202708 posted by user tambourine_man with 121 comments, the page state tool did not capture the points/score information from either the main page ",Go to news.ycombinator.com and return how many points the #1 ranked story has.,
+hn-003,navigation,True,True,3,25652,420,26072,13.21,Book Review for the Art of Doing Science and Engineering,"Go to news.ycombinator.com, click on 'new' to see the newest stories, and return the title of the first story.",
+hn-004,navigation,True,True,4,37497,435,37932,16.06,Ask HN: How do we solve the bot flooding problem without destroying anonymity?,"Go to news.ycombinator.com, click on 'ask' to see Ask HN posts, and return the title of the top Ask HN post.",
+hn-005,navigation,True,True,5,71746,899,72645,24.56,31,"Go to news.ycombinator.com, navigate to page 2, and return the rank number of the first story shown on page 2.",
+gh-001,extraction,True,True,2,7994,220,8214,7.24,ruvnet/wifi-densepose,Go to github.com/trending and return the name of the #1 trending repository today.,
+gh-002,extraction,True,True,4,34529,532,35061,15.73,Rust,Go to github.com/trending and return the programming language of the #1 trending repository.,
+gh-003,navigation,True,True,2,8361,204,8565,7.88,ruvnet/wifi-densepose,Go to github.com/trending/python and return the name of the #1 trending Python repository.,
+gh-004,extraction,True,True,3,24282,334,24616,11.54,TypeScript (95.8%),Go to github.com/microsoft/vscode and return the primary programming language used in the repository.,
+pypi-001,extraction,True,True,6,35895,539,36434,19.75,2.32.5,Go to pypi.org/project/requests and return the current latest version number.,
+pypi-002,extraction,True,True,6,38692,838,39530,24.87,"Unable to extract the version number from the page state. The page at pypi.org/project/playwright loaded successfully, but the version number text was not captured in the available page elements. Typically, PyPI displays the version prominently near the package name, but this information was not acc",Go to pypi.org/project/playwright and return the current latest version number.,
+pypi-003,search,True,True,5,22169,404,22573,17.07,browser-automation-launcher,Go to pypi.org and search for 'browser automation'. Return the name of the first result.,
+pypi-004,extraction,True,True,6,33294,607,33901,21.91,2.4.2,Go to pypi.org/project/numpy and return the current latest version number.,
+pypi-005,extraction,True,True,8,66867,925,67792,30.73,Samuel Colvin,Go to pypi.org/project/pydantic and return the name of the project's author or maintainer.,
+npm-001,extraction,True,True,8,26375,696,27071,47.91,Unable to retrieve the current latest version number of lodash from npmjs.com due to Cloudflare security verification blocking page access. The page remained on a security check screen and did not load the package information.,Go to npmjs.com/package/lodash and return the current latest version number.,
+npm-002,extraction,True,True,8,25196,646,25842,43.32,Unable to retrieve the current latest version number of React from npmjs.com/package/react due to Cloudflare security verification blocking access to the page.,Go to npmjs.com/package/react and return the current latest version number.,
+duck-001,search,True,True,8,42614,849,43463,29.62,Paris,"Go to duckduckgo.com, search for 'capital of France', and return the answer.",
+duck-002,search,True,True,8,37958,815,38773,58.75,"299,792,458 m/s","Go to duckduckgo.com, search for 'speed of light in m/s', and return the value.",
+duck-003,search,True,True,8,37858,789,38647,57.8,"The tallest mountain in the world is Mount Everest, with a height of 8,849 meters (29,032 feet) above sea level.","Go to duckduckgo.com, search for 'tallest mountain in the world', and return its name and height.",
+duck-004,search,True,True,8,42925,802,43727,27.87,Alexander Graham Bell,"Go to duckduckgo.com, search for 'who invented the telephone', and return the inventor's name.",
+duck-005,search,True,True,7,33414,775,34189,26.67,Pacific Ocean,"Go to duckduckgo.com, search for 'largest ocean on Earth', and return its name.",
+duck-006,search,True,True,8,40573,778,41351,58.37,100°C - The boiling point of water in Celsius is 100 degrees Celsius at standard atmospheric pressure (1 atm at sea level).,"Go to duckduckgo.com, search for 'boiling point of water in Celsius', and return the value.",
+weather-001,extraction,True,True,5,19088,600,19688,81.27,+9°C (9 degrees Celsius),Go to wttr.in/London and return the current temperature shown for London.,
+arxiv-001,search,True,True,11,172196,1331,173527,47.23,8,"Go to arxiv.org, search for 'attention is all you need', and return the number of authors of the first result.",
+arxiv-002,extraction,True,True,3,14799,279,15078,11.58,Attention Is All You Need,Go to arxiv.org/abs/1706.03762 and return the full title of the paper.,
+arxiv-003,extraction,True,True,2,6645,202,6847,5.83,BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding,Go to arxiv.org/abs/1810.04805 and return the title of the paper.,
+mdn-001,extraction,True,True,8,84154,909,85063,56.63,"According to the MDN page, the map() method returns a new array with each element being the result of the callback function. Specifically, it creates a new array populated with the results of calling the provided callback function on every element in the calling array.",Go to developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map and return what the map() method returns according to the page.,
+mdn-002,extraction,True,True,8,155075,1159,156234,35.84,"Yes, the page describes what the display property does. The CSS display property sets whether an element is treated as a block or inline box and determines the layout used for its children (such as flow layout, grid, or flex). The page contains a ""Formal syntax"" section, though I was unable to extra",Go to developer.mozilla.org/en-US/docs/Web/CSS/display and return the first value listed under the 'Formal syntax' or check if the page describes what the display property does.,
+scroll-001,scroll,True,True,16,470939,1794,472733,53.62,External links,"Go to en.wikipedia.org/wiki/Artificial_intelligence, scroll to the bottom of the page, and return the last section heading you find.",
+scroll-002,scroll,True,True,16,372850,2361,375211,62.61,"The first sentence in the Typing section of the Python programming language Wikipedia page states: ""Python uses duck typing and is dynamically typed and strongly typed.""
+
+This sentence describes the fundamental characteristics of Python's type system, explaining that it employs duck typing (where an","Go to en.wikipedia.org/wiki/Python_(programming_language), scroll down until you find the 'Typing' section, and return the first sentence or description you find there.",
+multi-001,multi-step,True,True,9,157172,1029,158201,33.78,Claude Shannon was born in 1916 and Alan Turing was born in 1912.,"Go to en.wikipedia.org, search for 'Claude Shannon', find when he was born, then search for 'Alan Turing' and find when he was born. Return both birth years.",
+multi-002,multi-step,True,True,18,464439,1945,466384,117.15,1956,"Go to en.wikipedia.org/wiki/Python_(programming_language), find who created Python, then navigate to that person's Wikipedia article and return their birth year.",
+multi-003,multi-step,True,True,9,64235,981,65216,30.51,"requests latest version: 2.32.5
+httpx latest version: 0.28.1",Go to pypi.org/project/requests and note the latest version. Then go to pypi.org/project/httpx and note its latest version. Return both version numbers.,
+multi-004,multi-step,True,True,3,21194,371,21565,12.08,125,Go to news.ycombinator.com and find the #1 story. Then go to the comments page for that story and return the total number of comments.,
+so-001,extraction,True,False,10,36015,798,36813,52.85,Why is processing a sorted array faster than processing an unsorted array?,Go to stackoverflow.com/questions?tab=votes and return the title of the highest voted question of all time.,
+so-002,navigation,True,True,10,34929,794,35723,51.69,"Unable to complete the task. Stack Overflow's Cloudflare security verification blocked access to the website. The page remained on the ""Just a moment... Performing security verification"" screen and never loaded the actual Stack Overflow site where I could search for 'python list comprehension' and r","Go to stackoverflow.com, search for 'python list comprehension', and return the title of the first search result.",
+count-001,count,True,True,4,44413,924,45337,22.26,30,Go to news.ycombinator.com and count how many stories are listed on the front page. Return the number.,
+count-002,count,True,True,3,19191,484,19675,12.21,"The G7 has 7 member countries: Canada, France, Germany, Italy, Japan, United Kingdom, and United States. (The European Union also participates in G7 meetings but is not counted as a member country since it is a supranational organization.)",Go to en.wikipedia.org/wiki/G7 and return how many member countries the G7 has.,

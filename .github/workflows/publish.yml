@@ -1,0 +1,92 @@
+name: Publish to PyPI
+
+# Triggered by pushing a version tag, e.g.:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# PREREQUISITE — before the first publish:
+#   1. py-wraps-data-types must be available on PyPI.
+#      When it is, remove [tool.uv.sources] from pyproject.toml and pin:
+#        dependencies = [..., "py-wraps-data-types>=<version>"]
+#
+#   2. Register llmbrowser as a Trusted Publisher on PyPI so that this
+#      workflow can publish without an API token (uses OIDC instead):
+#        https://pypi.org/manage/account/publishing/
+#        Project name : llmbrowser
+#        Owner        : Ponprabhakar-pg
+#        Repository   : llmbrowser
+#        Workflow     : publish.yml
+#        Environment  : pypi
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ── Run the full test suite before publishing ─────────────────────────────
+  unit-tests:
+    name: Unit tests / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/test_unit.py -v
+
+  browser-tests:
+    name: Browser tests / Python 3.13
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Install Playwright browsers and system dependencies
+        run: uv run playwright install chromium --with-deps
+
+      - name: Run browser tests
+        run: uv run pytest tests/test_browser.py -v
+
+  # ── Build and publish — only runs after all tests pass ───────────────────
+  publish:
+    name: Publish to PyPI
+    needs: [unit-tests, browser-tests]   # blocked until both test jobs pass
+    runs-on: ubuntu-latest
+    environment: pypi                    # maps to the GitHub environment you create
+
+    permissions:
+      id-token: write                    # required for OIDC Trusted Publisher
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No credentials needed — OIDC Trusted Publisher handles authentication.
+        # If you need to publish to TestPyPI first, add:
+        #   with:
+        #     repository-url: https://test.pypi.org/legacy/

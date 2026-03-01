@@ -1,0 +1,54 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Unit tests — no browser needed, run on all supported Python versions ──
+  unit-tests:
+    name: Unit tests / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # keep running other versions if one fails
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/test_unit.py -v
+
+  # ── Browser tests — require Chromium, run on the latest Python only ───────
+  # Playwright behaviour is not Python-version-specific, so running on one
+  # version keeps CI fast while still exercising the full integration surface.
+  browser-tests:
+    name: Browser tests / Python 3.13
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Install Playwright browsers and system dependencies
+        # --with-deps installs the OS-level libraries Chromium needs on Linux
+        run: uv run playwright install chromium --with-deps
+
+      - name: Run browser tests
+        run: uv run pytest tests/test_browser.py -v
