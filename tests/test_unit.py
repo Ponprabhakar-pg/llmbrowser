@@ -193,8 +193,8 @@ class TestFindBrowser:
 
 class TestAttach:
     async def test_attach_raises_when_no_binary(self, monkeypatch):
-        from llmbrowser import utils
-        monkeypatch.setattr(utils, "find_chrome_binary", lambda: None)
+        import llmbrowser.core as core_mod
+        monkeypatch.setattr(core_mod, "find_chrome_binary", lambda: None)
         with pytest.raises(RuntimeError, match="Could not find"):
             await LLMBrowser.attach(binary=None)
 
