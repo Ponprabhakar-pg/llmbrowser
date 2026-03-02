@@ -90,3 +90,48 @@ jobs:
         # If you need to publish to TestPyPI first, add:
         #   with:
         #     repository-url: https://test.pypi.org/legacy/
+
+  # ── Auto-bump version after a successful publish ──────────────────────────
+  bump-version:
+    name: Bump version after publish
+    needs: [publish]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # required to push the version bump commit
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute next patch version
+        id: bump
+        run: |
+          # Strip leading 'v' from the tag (e.g. v0.2.0 -> 0.2.0)
+          TAG="${GITHUB_REF_NAME#v}"
+          # Increment the patch segment: 0.2.0 -> 0.2.1
+          NEXT=$(python3 -c "
+          parts = '$TAG'.split('.')
+          parts[-1] = str(int(parts[-1]) + 1)
+          print('.'.join(parts))
+          ")
+          echo "current=$TAG" >> $GITHUB_OUTPUT
+          echo "next=$NEXT" >> $GITHUB_OUTPUT
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i 's/^version = "${{ steps.bump.outputs.current }}"/version = "${{ steps.bump.outputs.next }}"/' pyproject.toml
+
+      - name: Update version in llmbrowser/__init__.py
+        run: |
+          sed -i 's/__version__ = "${{ steps.bump.outputs.current }}"/__version__ = "${{ steps.bump.outputs.next }}"/' llmbrowser/__init__.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml llmbrowser/__init__.py
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.next }} [skip ci]"
+          git push origin master
