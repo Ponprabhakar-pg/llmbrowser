@@ -1,6 +1,6 @@
 [project]
 name = "llmbrowser"
-version = "0.1.2"
+version = "0.2.0"
 description = "A framework-agnostic browser tool for AI agents. Works with Anthropic, OpenAI, LangChain, and any agent framework."
 readme = "README.md"
 requires-python = ">=3.11"

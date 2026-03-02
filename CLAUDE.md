@@ -140,7 +140,7 @@ BrowserToolkit(
 | `as_llamaindex_tools()` | `list[FunctionTool]` | Requires `llmbrowser[llamaindex]` |
 | `get_tools()` | `list[async_fn]` | Plain async callables |
 
-Tool count: **16 base** + optional **solve_captcha** (when `on_captcha_detected` set on `LLMBrowser`) + **get_totp_code** (when `totp_secret` set on `BrowserToolkit`) + **request_human_help** (when `on_human_needed` set).
+Tool count: **23 base** + optional **solve_captcha** (when `on_captcha_detected` set on `LLMBrowser`) + **get_totp_code** (when `totp_secret` set on `BrowserToolkit`) + **request_human_help** (when `on_human_needed` set).
 
 `_all_schemas()` instance method returns the active schema list depending on callbacks.
 
@@ -162,15 +162,22 @@ Listed in `BrowserToolkit.BASE_TOOLS` (frozenset). Schemas are co-located with e
 5. `press_key` — keyboard input ("Enter", "Tab", "Control+a", etc.)
 6. `scroll_page` — scroll up/down/left/right (default 300px down)
 7. `go_back` — browser history back
-8. `wait_for_page` — wait N ms (500–10000, default 2000)
-9. `new_tab` — open tab, optionally navigate
-10. `switch_tab` — switch by index
-11. `list_tabs` — list all tabs with metadata
-12. `close_tab` — close active tab (raises if last)
-13. `upload_file` — file upload to file-input element
-14. `get_downloads` — list downloaded file paths
-15. `read_file` — read text/binary files (binary returns summary; >50KB truncated)
-16. `dismiss_dialogs` — dismiss cookie banners & consent dialogs
+8. `go_forward` — browser history forward
+9. `reload_page` — reload the current page
+10. `hover_element` — hover by numeric ID (reveals tooltips/dropdowns)
+11. `select_option` — select `<select>` option by value, label, or index
+12. `wait_for_page` — wait N ms (500–10000, default 2000)
+13. `new_tab` — open tab, optionally navigate
+14. `switch_tab` — switch by index
+15. `list_tabs` — list all tabs with metadata
+16. `close_tab` — close active tab (raises if last)
+17. `upload_file` — file upload to file-input element
+18. `get_downloads` — list downloaded file paths
+19. `read_file` — read text/binary files (binary returns summary; >50KB truncated)
+20. `dismiss_dialogs` — dismiss cookie banners & consent dialogs
+21. `manage_storage` — localStorage/sessionStorage get/set/remove/clear/getall
+22. `manage_cookies` — list/set/delete cookies for the current context
+23. `execute_script` — run arbitrary JS and return result as string
 
 ---
 

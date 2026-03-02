@@ -473,3 +473,347 @@ class TestFileHandling:
     async def test_downloads_initially_empty(self, browser):
         # Fresh session fixture — no downloads yet
         assert isinstance(browser.downloads, list)
+
+
+# ── New tools — navigation helpers ───────────────────────────────────────────
+
+class TestGoForwardReload:
+    async def test_go_forward(self, browser):
+        await browser.navigate("https://example.com")
+        await load_html(browser, BASIC_HTML)
+        await browser.go_back()
+        await browser.go_forward()
+        # After going forward we should be back on the local HTML page
+        assert browser.current_url is not None
+
+    async def test_reload_resets_js_state(self, browser):
+        await load_html(browser, BASIC_HTML)
+        # Mutate the DOM with JS
+        await browser._page.evaluate("document.title = 'mutated'")
+        assert await browser._page.title() == "mutated"
+        await browser.reload()
+        # After reload, set_content-based pages reset to their original title
+        title = await browser._page.title()
+        assert title != "mutated" or title == ""   # either reset or blank
+
+    async def test_toolkit_go_forward(self, browser):
+        await browser.navigate("https://example.com")
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        await tk.execute("go_back")
+        result = await tk.execute("go_forward")
+        assert "URL:" in result
+
+    async def test_toolkit_reload_page(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        result = await tk.execute("reload_page")
+        assert "URL:" in result
+
+
+# ── New tools — hover & select ────────────────────────────────────────────────
+
+class TestHoverAndSelect:
+    async def test_hover_element_fires_mouseover(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onmouseover="document.title='hovered'">Hover me</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        await browser.hover_element(btn["id"])
+        assert await browser._page.title() == "hovered"
+
+    async def test_hover_returns_page_state(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onmouseover="document.title='hovered'">Hover me</button>
+        </body></html>"""
+        await load_html(browser, html)
+        tk = BrowserToolkit(browser)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        result = await tk.execute("hover_element", element_id=btn["id"])
+        assert "URL:" in result
+
+    async def test_select_option_by_value(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <select id="color">
+              <option value="red">Red</option>
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+            </select>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        sel = next(e for e in state.interactive_elements if e["tag"] == "select")
+        selected = await browser.select_option(sel["id"], value="green")
+        assert selected == "green"
+        val = await browser._page.eval_on_selector("#color", "el => el.value")
+        assert val == "green"
+
+    async def test_select_option_by_label(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <select id="fruit">
+              <option value="a">Apple</option>
+              <option value="b">Banana</option>
+            </select>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        sel = next(e for e in state.interactive_elements if e["tag"] == "select")
+        selected = await browser.select_option(sel["id"], label="Banana")
+        assert selected == "b"
+
+    async def test_select_option_by_index(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <select id="num">
+              <option value="one">One</option>
+              <option value="two">Two</option>
+              <option value="three">Three</option>
+            </select>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        sel = next(e for e in state.interactive_elements if e["tag"] == "select")
+        selected = await browser.select_option(sel["id"], index=2)
+        assert selected == "three"
+
+    async def test_select_no_selector_raises(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <select id="s"><option value="x">X</option></select>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        sel = next(e for e in state.interactive_elements if e["tag"] == "select")
+        with pytest.raises(ValueError, match="Provide one of"):
+            await browser.select_option(sel["id"])
+
+    async def test_toolkit_select_option(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <select id="s">
+              <option value="x">X</option>
+              <option value="y">Y</option>
+            </select>
+        </body></html>"""
+        await load_html(browser, html)
+        tk = BrowserToolkit(browser)
+        state = await browser.get_state()
+        sel = next(e for e in state.interactive_elements if e["tag"] == "select")
+        result = await tk.execute("select_option", element_id=sel["id"], value="y")
+        assert "Selected: y" in result
+
+
+# ── New tools — storage ───────────────────────────────────────────────────────
+
+class TestManageStorage:
+    async def test_localstorage_set_and_get(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_storage("local", "set", key="foo", value="bar")
+        result = await browser.manage_storage("local", "get", key="foo")
+        assert result == "bar"
+
+    async def test_localstorage_get_missing_key(self, browser):
+        await load_html(browser, BASIC_HTML)
+        result = await browser.manage_storage("local", "get", key="__no_such_key__")
+        assert result == "(not set)"
+
+    async def test_localstorage_remove(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_storage("local", "set", key="temp", value="val")
+        await browser.manage_storage("local", "remove", key="temp")
+        result = await browser.manage_storage("local", "get", key="temp")
+        assert result == "(not set)"
+
+    async def test_localstorage_getall(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_storage("local", "clear")
+        await browser.manage_storage("local", "set", key="k1", value="v1")
+        await browser.manage_storage("local", "set", key="k2", value="v2")
+        result = await browser.manage_storage("local", "getall")
+        import json
+        data = json.loads(result)
+        assert data["k1"] == "v1"
+        assert data["k2"] == "v2"
+
+    async def test_localstorage_clear(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_storage("local", "set", key="x", value="1")
+        await browser.manage_storage("local", "clear")
+        result = await browser.manage_storage("local", "getall")
+        import json
+        assert json.loads(result) == {}
+
+    async def test_sessionstorage_set_and_get(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_storage("session", "set", key="sess_key", value="sess_val")
+        result = await browser.manage_storage("session", "get", key="sess_key")
+        assert result == "sess_val"
+
+    async def test_toolkit_manage_storage(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        await tk.execute("manage_storage", store="local", action="set", key="tk_key", value="tk_val")
+        result = await tk.execute("manage_storage", store="local", action="get", key="tk_key")
+        assert "tk_val" in result
+
+
+# ── New tools — cookies ───────────────────────────────────────────────────────
+
+class TestManageCookies:
+    async def test_set_and_list_cookie(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_cookies("set", name="test_cookie", value="cookie_val")
+        result = await browser.manage_cookies("list")
+        assert "test_cookie" in result
+        assert "cookie_val" in result
+
+    async def test_delete_cookie(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.manage_cookies("set", name="del_me", value="gone")
+        await browser.manage_cookies("delete", name="del_me")
+        result = await browser.manage_cookies("list")
+        assert "del_me" not in result
+
+    async def test_list_cookies_empty(self, browser):
+        await load_html(browser, BASIC_HTML)
+        # Clear all cookies first
+        await browser._context.clear_cookies()
+        result = await browser.manage_cookies("list")
+        assert result == "No cookies set."
+
+    async def test_toolkit_manage_cookies(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        await tk.execute("manage_cookies", action="set", name="tk_cookie", value="tk_val")
+        result = await tk.execute("manage_cookies", action="list")
+        assert "tk_cookie" in result
+
+
+# ── New tools — execute_script ────────────────────────────────────────────────
+
+class TestExecuteScript:
+    async def test_returns_string_result(self, browser):
+        await load_html(browser, BASIC_HTML)
+        result = await browser.execute_script("() => document.title")
+        assert isinstance(result, str)
+
+    async def test_returns_no_return_value_sentinel(self, browser):
+        await load_html(browser, BASIC_HTML)
+        result = await browser.execute_script("() => { /* no return */ }")
+        assert result == "(no return value)"
+
+    async def test_can_read_dom(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <p id="target">hello script</p>
+        </body></html>"""
+        await load_html(browser, html)
+        result = await browser.execute_script(
+            "() => document.getElementById('target').textContent"
+        )
+        assert result == "hello script"
+
+    async def test_can_mutate_dom(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.execute_script("() => { document.title = 'script_title'; }")
+        title = await browser._page.title()
+        assert title == "script_title"
+
+    async def test_toolkit_execute_script(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        result = await tk.execute("execute_script", script="() => 'hello from js'")
+        assert "hello from js" in result
+
+
+# ── New tools — get_element_attribute ────────────────────────────────────────
+
+class TestGetElementAttribute:
+    async def test_reads_href(self, browser):
+        await load_html(browser, BASIC_HTML)
+        state = await browser.get_state()
+        link = next(e for e in state.interactive_elements if e["tag"] == "a")
+        result = await browser.get_element_attribute(link["id"], "href")
+        assert "example.com" in result
+
+    async def test_reads_data_attribute(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button data-action="submit" data-id="42">Go</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        assert await browser.get_element_attribute(btn["id"], "data-action") == "submit"
+        assert await browser.get_element_attribute(btn["id"], "data-id") == "42"
+
+    async def test_missing_attribute_returns_sentinel(self, browser):
+        await load_html(browser, BASIC_HTML)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        result = await browser.get_element_attribute(btn["id"], "nonexistent-attr")
+        assert "not found" in result
+
+    async def test_toolkit_get_element_attribute(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        state = await browser.get_state()
+        link = next(e for e in state.interactive_elements if e["tag"] == "a")
+        result = await tk.execute("get_element_attribute", element_id=link["id"], attribute="href")
+        assert "example.com" in result
+
+
+# ── New tools — handle_dialog ─────────────────────────────────────────────────
+
+class TestHandleDialog:
+    async def test_accept_alert(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onclick="alert('hello'); document.title='after_alert'">Alert</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        browser.handle_next_dialog("accept")
+        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.wait_for_timeout(300)
+        assert await browser._page.title() == "after_alert"
+
+    async def test_dismiss_confirm(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        browser.handle_next_dialog("dismiss")
+        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.wait_for_timeout(300)
+        assert await browser._page.title() == "no"
+
+    async def test_accept_confirm(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        browser.handle_next_dialog("accept")
+        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.wait_for_timeout(300)
+        assert await browser._page.title() == "yes"
+
+    async def test_accept_prompt_with_text(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button onclick="document.title = prompt('name?')">Prompt</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        browser.handle_next_dialog("accept", prompt_text="Alice")
+        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.wait_for_timeout(300)
+        assert await browser._page.title() == "Alice"
+
+    async def test_toolkit_handle_dialog(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        result = await tk.execute("handle_dialog", action="accept")
+        assert "accept" in result

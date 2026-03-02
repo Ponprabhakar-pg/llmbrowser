@@ -51,9 +51,12 @@ class BrowserToolkit:
 
     BASE_TOOLS: frozenset = frozenset({
         "navigate", "get_page_state", "click_element", "type_text",
-        "press_key", "scroll_page", "go_back", "wait_for_page",
+        "press_key", "scroll_page", "go_back", "go_forward", "reload_page",
+        "hover_element", "select_option", "wait_for_page",
         "new_tab", "switch_tab", "list_tabs", "close_tab",
         "upload_file", "get_downloads", "read_file", "dismiss_dialogs",
+        "manage_storage", "manage_cookies", "execute_script",
+        "get_element_attribute", "handle_dialog",
     })
 
     def __init__(
@@ -608,11 +611,260 @@ class BrowserToolkit:
             },
         )
 
+        async def go_forward() -> str:
+            await browser.go_forward()
+            state = await browser.get_state(mode=mode)
+            return _format_state(state)
+        go_forward = _spec(go_forward,
+            description=(
+                "Navigate forward to the next page in browser history. "
+                "Use this to redo a go_back navigation."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        async def reload_page() -> str:
+            await browser.reload()
+            state = await browser.get_state(mode=mode)
+            return _format_state(state)
+        reload_page = _spec(reload_page,
+            description=(
+                "Reload the current page. "
+                "Use this to refresh stale content or retry after a network hiccup."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        async def hover_element(element_id: int) -> str:
+            await browser.hover_element(element_id)
+            state = await browser.get_state(mode=mode)
+            return _format_state(state)
+        hover_element = _spec(hover_element,
+            description=(
+                "Hover the mouse over an element to reveal tooltips, dropdown menus, "
+                "or other hover-triggered content. Use get_page_state after to see what appeared."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "element_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the element to hover over.",
+                    },
+                },
+                "required": ["element_id"],
+            },
+        )
+
+        async def select_option(
+            element_id: int,
+            value: Optional[str] = None,
+            label: Optional[str] = None,
+            index: Optional[int] = None,
+        ) -> str:
+            selected = await browser.select_option(element_id, value=value, label=label, index=index)
+            state = await browser.get_state(mode=mode)
+            return f"Selected: {selected}\n" + _format_state(state)
+        select_option = _spec(select_option,
+            description=(
+                "Select an option in a <select> dropdown element. "
+                "Provide exactly one of: value (option value attr), label (visible text), "
+                "or index (0-based position)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "element_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the <select> element.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "The option's value attribute to select.",
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The option's visible label text to select.",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "Zero-based index of the option to select.",
+                        "minimum": 0,
+                    },
+                },
+                "required": ["element_id"],
+            },
+        )
+
+        async def manage_storage(
+            store: Literal["local", "session"],
+            action: Literal["get", "set", "remove", "clear", "getall"],
+            key: Optional[str] = None,
+            value: Optional[str] = None,
+        ) -> str:
+            return await browser.manage_storage(store, action, key=key, value=value)
+        manage_storage = _spec(manage_storage,
+            description=(
+                "Read or write browser localStorage or sessionStorage. "
+                "Actions: 'get' (read one key), 'set' (write key+value), "
+                "'remove' (delete one key), 'clear' (wipe all), 'getall' (dump all as JSON)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "store": {
+                        "type": "string",
+                        "enum": ["local", "session"],
+                        "description": "'local' for localStorage, 'session' for sessionStorage.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["get", "set", "remove", "clear", "getall"],
+                        "description": "Operation to perform.",
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "Storage key. Required for get, set, remove.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Value to store. Required for set.",
+                    },
+                },
+                "required": ["store", "action"],
+            },
+        )
+
+        async def manage_cookies(
+            action: Literal["list", "set", "delete"],
+            name: Optional[str] = None,
+            value: Optional[str] = None,
+            path: str = "/",
+        ) -> str:
+            return await browser.manage_cookies(action, name=name, value=value, path=path)
+        manage_cookies = _spec(manage_cookies,
+            description=(
+                "List, set, or delete browser cookies for the current context. "
+                "Actions: 'list' (show all cookies), 'set' (add/update a cookie), "
+                "'delete' (remove a cookie by name)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "set", "delete"],
+                        "description": "Operation to perform.",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Cookie name. Required for set and delete.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Cookie value. Required for set.",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Cookie path. Default: '/'.",
+                    },
+                },
+                "required": ["action"],
+            },
+        )
+
+        async def execute_script(script: str) -> str:
+            return await browser.execute_script(script)
+        execute_script = _spec(execute_script,
+            description=(
+                "Execute arbitrary JavaScript on the current page and return the result. "
+                "Use this for operations not covered by other tools. "
+                "The script runs in the page context — return a value to get output."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "script": {
+                        "type": "string",
+                        "description": (
+                            "JavaScript to evaluate. Return a value to receive output, "
+                            "e.g. '() => document.title' or '() => window.myVar'."
+                        ),
+                    },
+                },
+                "required": ["script"],
+            },
+        )
+
+        async def get_element_attribute(element_id: int, attribute: str) -> str:
+            return await browser.get_element_attribute(element_id, attribute)
+        get_element_attribute = _spec(get_element_attribute,
+            description=(
+                "Read a specific HTML attribute from an element by its numeric ID. "
+                "Use this to get href, src, value, placeholder, data-*, aria-*, "
+                "or any other attribute without fetching the full page state."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "element_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the element from page state.",
+                    },
+                    "attribute": {
+                        "type": "string",
+                        "description": (
+                            "Attribute name to read, e.g. 'href', 'src', 'value', "
+                            "'data-id', 'aria-label', 'placeholder'."
+                        ),
+                    },
+                },
+                "required": ["element_id", "attribute"],
+            },
+        )
+
+        async def handle_dialog(
+            action: Literal["accept", "dismiss"],
+            prompt_text: str = "",
+        ) -> str:
+            browser.handle_next_dialog(action, prompt_text=prompt_text)
+            return (
+                f"Dialog handler registered — will {action} the next alert/confirm/prompt. "
+                "Now trigger the action that causes the dialog to appear."
+            )
+        handle_dialog = _spec(handle_dialog,
+            description=(
+                "Pre-register a handler for the next native browser dialog "
+                "(alert, confirm, or prompt). "
+                "Call this BEFORE the action that triggers the dialog. "
+                "Use action='accept' to click OK (optionally with prompt_text for prompt dialogs), "
+                "or action='dismiss' to click Cancel."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["accept", "dismiss"],
+                        "description": "'accept' clicks OK, 'dismiss' clicks Cancel.",
+                    },
+                    "prompt_text": {
+                        "type": "string",
+                        "description": "Text to type into a prompt() dialog before accepting. Ignored for alert/confirm.",
+                    },
+                },
+                "required": ["action"],
+            },
+        )
+
         tools = [
             navigate, get_page_state, click_element, type_text, press_key,
-            scroll_page, go_back, wait_for_page,
+            scroll_page, go_back, go_forward, reload_page, hover_element,
+            select_option, wait_for_page,
             new_tab, switch_tab, list_tabs, close_tab,
             dismiss_dialogs, upload_file, get_downloads, read_file,
+            manage_storage, manage_cookies, execute_script,
+            get_element_attribute, handle_dialog,
         ]
 
         # TOTP tool — only included when a TOTP secret is configured.

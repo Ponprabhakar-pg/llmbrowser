@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/Ponprabhakar-pg/llmbrowser/actions/workflows/test.yml/badge.svg)](https://github.com/Ponprabhakar-pg/llmbrowser/actions)
 
-Give your AI agent a real browser. llmbrowser wraps [Playwright](https://playwright.dev/python/) into **16 ready-to-use browser tools** and converts them to whichever tool format your LLM framework expects — all from the same codebase.
+Give your AI agent a real browser. llmbrowser wraps [Playwright](https://playwright.dev/python/) into **25 ready-to-use browser tools** and converts them to whichever tool format your LLM framework expects — all from the same codebase.
 
 ```python
 from llmbrowser import LLMBrowser, BrowserToolkit
@@ -31,7 +31,7 @@ async with LLMBrowser() as browser:
   - [AWS Bedrock](#aws-bedrock)
   - [LangChain](#langchain)
   - [LlamaIndex](#llamaindex)
-- [The 16 Browser Tools](#the-16-browser-tools)
+- [The 25 Browser Tools](#the-25-browser-tools)
 - [Page State Modes](#page-state-modes)
 - [Advanced Features](#advanced-features)
   - [Stealth Mode](#stealth-mode)
@@ -49,7 +49,7 @@ async with LLMBrowser() as browser:
 ## Features
 
 - **Framework-agnostic** — one package, six adapters: Anthropic, OpenAI, Google Gemini, AWS Bedrock, LangChain, LlamaIndex
-- **16 built-in browser tools** — navigate, click, type, scroll, key press, multi-tab, file upload, downloads, and more
+- **25 built-in browser tools** — navigate, click, type, scroll, hover, select dropdowns, storage, cookies, script execution, multi-tab, file upload, and more
 - **Three page-state modes** — full DOM tree, token-efficient ARIA tree, or both
 - **Stealth mode** — patches `navigator.webdriver`, WebGL, canvas, plugins and more to avoid bot detection
 - **Proxy support** — HTTP/HTTPS and SOCKS5 proxies with optional credentials
@@ -282,27 +282,63 @@ async with LLMBrowser(headless=True) as browser:
 
 ---
 
-## The 16 Browser Tools
+## The 25 Browser Tools
 
-Every adapter exposes the same 16 tools. Two more are added automatically when you register optional callbacks (see [Advanced Features](#advanced-features)).
+Every adapter exposes the same 25 tools. Up to three more are added automatically when you register optional callbacks (see [Advanced Features](#advanced-features)).
+
+### Navigation & page control
 
 | Tool | Description |
 |------|-------------|
 | `navigate` | Go to a URL and wait for the page to settle |
+| `go_back` | Navigate back in browser history |
+| `go_forward` | Navigate forward in browser history |
+| `reload_page` | Reload the current page |
+| `wait_for_page` | Wait N milliseconds for dynamic content to load (500–10 000) |
+
+### Observation
+
+| Tool | Description |
+|------|-------------|
 | `get_page_state` | Capture URL, title, screenshot, elements, and DOM/ARIA tree |
+| `get_element_attribute` | Read any HTML attribute (`href`, `src`, `data-*`, `aria-*`) from an element |
+
+### Interaction
+
+| Tool | Description |
+|------|-------------|
 | `click_element` | Click an element by its numeric ID |
 | `type_text` | Type into an input or textarea (clears existing content first) |
 | `press_key` | Press a keyboard key — `"Enter"`, `"Tab"`, `"Control+a"`, etc. |
+| `hover_element` | Hover over an element to reveal tooltips or dropdown menus |
+| `select_option` | Select a `<select>` dropdown option by value, label, or index |
 | `scroll_page` | Scroll up / down / left / right by N pixels (default 300) |
-| `go_back` | Navigate back in browser history |
-| `wait_for_page` | Wait N milliseconds for dynamic content to load (500–10 000) |
+| `handle_dialog` | Pre-register a handler for the next `alert` / `confirm` / `prompt` dialog |
+
+### Storage & cookies
+
+| Tool | Description |
+|------|-------------|
+| `manage_storage` | Read / write / clear `localStorage` or `sessionStorage` |
+| `manage_cookies` | List, set, or delete cookies for the current browser context |
+
+### Tabs
+
+| Tool | Description |
+|------|-------------|
 | `new_tab` | Open a new browser tab, optionally navigate to a URL |
 | `switch_tab` | Switch to a tab by its index |
 | `list_tabs` | List all open tabs with URL, title, and active status |
 | `close_tab` | Close the currently active tab |
+
+### Files & scripting
+
+| Tool | Description |
+|------|-------------|
 | `upload_file` | Set a file on a `<input type="file">` element |
 | `get_downloads` | List files downloaded in the current session |
 | `read_file` | Read a local file's contents (text or binary summary) |
+| `execute_script` | Run arbitrary JavaScript on the page and return the result |
 | `dismiss_dialogs` | Dismiss cookie consent banners and GDPR dialogs |
 
 ### Optional tools (added automatically)
@@ -310,6 +346,7 @@ Every adapter exposes the same 16 tools. Two more are added automatically when y
 | Tool | Added when |
 |------|-----------|
 | `solve_captcha` | `on_captcha_detected=` callback provided to `LLMBrowser` |
+| `get_totp_code` | `totp_secret=` provided to `BrowserToolkit` (requires `llmbrowser[totp]`) |
 | `request_human_help` | `on_human_needed=` callback provided to `BrowserToolkit` |
 
 ---
@@ -466,7 +503,7 @@ async def my_handler(ctx: HumanHelpContext) -> str:
 async with LLMBrowser(headless=True) as browser:
     toolkit = BrowserToolkit(browser, on_human_needed=my_handler)
     # 'request_human_help' is now part of all adapter outputs
-    tools = toolkit.as_anthropic_tools()   # 17 tools (16 base + request_human_help)
+    tools = toolkit.as_anthropic_tools()   # 26 tools (25 base + request_human_help)
 ```
 
 **Common patterns:**
@@ -534,7 +571,7 @@ async with LLMBrowser(headless=True) as browser:
     print(browser.active_tab)   # index of the active tab
 ```
 
-Multi-tab tools are included in all 16 base tools, so agents can manage tabs without any extra configuration.
+Multi-tab tools are included in all 25 base tools, so agents can manage tabs without any extra configuration.
 
 ---
 
@@ -556,7 +593,7 @@ async with LLMBrowser(remote_cdp_url="ws://localhost:9222") as browser:
     await browser.navigate("https://example.com")
 ```
 
-**What still works with `remote_cdp_url`:** `stealth`, `session_file`, `viewport`, `user_agent`, `on_captcha_detected`, all 16 tools, HITL, multi-tab.
+**What still works with `remote_cdp_url`:** `stealth`, `session_file`, `viewport`, `user_agent`, `on_captcha_detected`, all 25 tools, HITL, multi-tab.
 
 **What is ignored:** `browser`, `headless`, `slow_mo`, `proxy` (the remote browser controls its own network — a warning is logged if `proxy` is also set).
 
@@ -587,7 +624,7 @@ LLMBrowser(
 
 Used as an async context manager: `async with LLMBrowser(...) as browser:`
 
-Key methods: `navigate`, `get_state`, `execute_action`, `step`, `click`, `type_text`, `press_key`, `scroll_page`, `go_back`, `go_forward`, `reload`, `new_tab`, `switch_tab`, `close_tab`, `list_tabs`, `save_session`, `load_session`, `detect_captcha`, `inject_captcha_token`, `solve_captcha`, `upload_file`, `read_file`, `page_title`.
+Key methods: `navigate`, `get_state`, `execute_action`, `step`, `go_back`, `go_forward`, `reload`, `hover_element`, `select_option`, `manage_storage`, `manage_cookies`, `execute_script`, `get_element_attribute`, `handle_next_dialog`, `new_tab`, `switch_tab`, `close_tab`, `list_tabs`, `save_session`, `load_session`, `detect_captcha`, `inject_captcha_token`, `solve_captcha`, `upload_file`, `read_file`, `page_title`.
 
 ### `BrowserToolkit`
 
@@ -596,6 +633,8 @@ BrowserToolkit(
     browser:         LLMBrowser,
     state_mode:      Literal["dom", "aria", "both"] = "dom",
     on_human_needed: Callable[[HumanHelpContext], Awaitable[str]] = None,
+    totp_secret:     str = None,         # enables get_totp_code tool (requires llmbrowser[totp])
+    tools:           list[str] = None,   # allowlist of tool names; None = all tools
 )
 ```
 

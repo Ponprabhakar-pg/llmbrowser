@@ -1387,3 +1387,142 @@ class LLMBrowser:
     async def reload(self) -> None:
         await self._page.reload()
         await safe_wait(self._page)
+
+    async def hover_element(self, element_id: int) -> None:
+        """Hover over an interactive element by its numeric llm-id."""
+        await self._inject_annotations()
+        locator = await self._find_element(element_id)
+        await locator.scroll_into_view_if_needed()
+        await locator.hover(timeout=10_000)
+        logger.info("Hovered element id=%d", element_id)
+
+    async def select_option(
+        self,
+        element_id: int,
+        value: Optional[str] = None,
+        label: Optional[str] = None,
+        index: Optional[int] = None,
+    ) -> str:
+        """Select an option in a <select> element. Returns the selected value."""
+        if value is None and label is None and index is None:
+            raise ValueError("Provide one of: value, label, or index.")
+        await self._inject_annotations()
+        locator = await self._find_element(element_id)
+        kwargs: dict = {}
+        if value is not None:
+            kwargs["value"] = value
+        elif label is not None:
+            kwargs["label"] = label
+        else:
+            kwargs["index"] = index
+        selected = await locator.select_option(**kwargs, timeout=10_000)
+        await safe_wait(self._page)
+        logger.info("Selected option %r in element id=%d", selected, element_id)
+        return selected[0] if selected else ""
+
+    async def manage_storage(
+        self,
+        store: Literal["local", "session"],
+        action: Literal["get", "set", "remove", "clear", "getall"],
+        key: Optional[str] = None,
+        value: Optional[str] = None,
+    ) -> str:
+        """Read/write/clear localStorage or sessionStorage."""
+        js_store = "localStorage" if store == "local" else "sessionStorage"
+        if action == "getall":
+            result = await self._page.evaluate(
+                f"() => JSON.stringify(Object.fromEntries(Object.entries({js_store})))"
+            )
+            return result or "{}"
+        if action == "get":
+            result = await self._page.evaluate(
+                "([s, k]) => window[s].getItem(k)", [js_store, key]
+            )
+            return result if result is not None else "(not set)"
+        if action == "set":
+            await self._page.evaluate(
+                "([s, k, v]) => window[s].setItem(k, v)", [js_store, key, value]
+            )
+            return f"Set {js_store}['{key}'] = '{value}'"
+        if action == "remove":
+            await self._page.evaluate(
+                "([s, k]) => window[s].removeItem(k)", [js_store, key]
+            )
+            return f"Removed {js_store}['{key}']"
+        if action == "clear":
+            await self._page.evaluate(f"() => {js_store}.clear()")
+            return f"Cleared all {js_store} entries"
+        raise ValueError(f"Unknown storage action: {action!r}")
+
+    async def manage_cookies(
+        self,
+        action: Literal["list", "set", "delete"],
+        name: Optional[str] = None,
+        value: Optional[str] = None,
+        path: str = "/",
+    ) -> str:
+        """List, set, or delete cookies for the current context."""
+        if action == "list":
+            cookies = await self._context.cookies()
+            if not cookies:
+                return "No cookies set."
+            return "\n".join(
+                f"{c['name']}={c['value']}  domain={c['domain']}  path={c['path']}"
+                for c in cookies
+            )
+        if action == "set":
+            await self._context.add_cookies(
+                [{"name": name, "value": value, "url": self._page.url, "path": path}]
+            )
+            logger.info("Set cookie '%s'", name)
+            return f"Set cookie '{name}'='{value}'"
+        if action == "delete":
+            all_cookies = await self._context.cookies()
+            remaining = [c for c in all_cookies if c["name"] != name]
+            await self._context.clear_cookies()
+            if remaining:
+                await self._context.add_cookies(remaining)
+            logger.info("Deleted cookie '%s'", name)
+            return f"Deleted cookie '{name}'"
+        raise ValueError(f"Unknown cookie action: {action!r}")
+
+    async def execute_script(self, script: str) -> str:
+        """Execute arbitrary JavaScript on the current page and return the result."""
+        result = await self._page.evaluate(script)
+        if result is None:
+            return "(no return value)"
+        return str(result)
+
+    async def get_element_attribute(self, element_id: int, attribute: str) -> str:
+        """Read an HTML attribute from an element by its numeric llm-id."""
+        await self._inject_annotations()
+        locator = await self._find_element(element_id)
+        value = await locator.get_attribute(attribute)
+        if value is None:
+            return f"(attribute '{attribute}' not found on element id={element_id})"
+        return value
+
+    def handle_next_dialog(
+        self,
+        action: Literal["accept", "dismiss"],
+        prompt_text: str = "",
+    ) -> None:
+        """
+        Pre-register a one-shot handler for the next native browser dialog
+        (alert / confirm / prompt).
+
+        Call this BEFORE triggering the action that causes the dialog to appear.
+        The handler fires automatically when the dialog opens, then unregisters itself.
+        """
+        async def _handler(dialog) -> None:
+            logger.info(
+                "Dialog intercepted — type=%s message=%r action=%s",
+                dialog.type, dialog.message, action,
+            )
+            if action == "accept":
+                await dialog.accept(prompt_text)
+            else:
+                await dialog.dismiss()
+
+        self._page.once("dialog", _handler)
+        logger.info("Dialog handler registered — action=%s", action)
