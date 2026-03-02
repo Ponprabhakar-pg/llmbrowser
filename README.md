@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/Ponprabhakar-pg/llmbrowser/actions/workflows/test.yml/badge.svg)](https://github.com/Ponprabhakar-pg/llmbrowser/actions)
 
-Give your AI agent a real browser. llmbrowser wraps [Playwright](https://playwright.dev/python/) into **25 ready-to-use browser tools** and converts them to whichever tool format your LLM framework expects — all from the same codebase.
+Give your AI agent a real browser. llmbrowser wraps [Playwright](https://playwright.dev/python/) into **30 ready-to-use browser tools** and converts them to whichever tool format your LLM framework expects — all from the same codebase.
 
 ```python
 from llmbrowser import LLMBrowser, BrowserToolkit
@@ -31,7 +31,7 @@ async with LLMBrowser() as browser:
   - [AWS Bedrock](#aws-bedrock)
   - [LangChain](#langchain)
   - [LlamaIndex](#llamaindex)
-- [The 25 Browser Tools](#the-25-browser-tools)
+- [The 30 Browser Tools](#the-30-browser-tools)
 - [Page State Modes](#page-state-modes)
 - [Advanced Features](#advanced-features)
   - [Stealth Mode](#stealth-mode)
@@ -49,7 +49,7 @@ async with LLMBrowser() as browser:
 ## Features
 
 - **Framework-agnostic** — one package, six adapters: Anthropic, OpenAI, Google Gemini, AWS Bedrock, LangChain, LlamaIndex
-- **25 built-in browser tools** — navigate, click, type, scroll, hover, select dropdowns, storage, cookies, script execution, multi-tab, file upload, and more
+- **30 built-in browser tools** — navigate, click, type, scroll, hover, select dropdowns, storage, cookies, script execution, multi-tab, file upload, and more
 - **Three page-state modes** — full DOM tree, token-efficient ARIA tree, or both
 - **Stealth mode** — patches `navigator.webdriver`, WebGL, canvas, plugins and more to avoid bot detection
 - **Proxy support** — HTTP/HTTPS and SOCKS5 proxies with optional credentials
@@ -282,9 +282,9 @@ async with LLMBrowser(headless=True) as browser:
 
 ---
 
-## The 25 Browser Tools
+## The 30 Browser Tools
 
-Every adapter exposes the same 25 tools. Up to three more are added automatically when you register optional callbacks (see [Advanced Features](#advanced-features)).
+Every adapter exposes the same 30 tools. Up to three more are added automatically when you register optional callbacks (see [Advanced Features](#advanced-features)).
 
 ### Navigation & page control
 
@@ -340,6 +340,21 @@ Every adapter exposes the same 25 tools. Up to three more are added automaticall
 | `read_file` | Read a local file's contents (text or binary summary) |
 | `execute_script` | Run arbitrary JavaScript on the page and return the result |
 | `dismiss_dialogs` | Dismiss cookie consent banners and GDPR dialogs |
+| `export_pdf` | Export the current page as a PDF file (Chromium headless only) |
+
+### Visual & interaction
+
+| Tool | Description |
+|------|-------------|
+| `drag_and_drop` | Drag one element onto another (Kanban, sortable lists, file-drop zones) |
+| `take_element_screenshot` | Screenshot a single element and return it as a base64-encoded PNG |
+
+### Frames & location
+
+| Tool | Description |
+|------|-------------|
+| `switch_frame` | List all iframes on the page and their URLs |
+| `set_geolocation` | Override the browser's reported GPS location |
 
 ### Optional tools (added automatically)
 
@@ -503,7 +518,7 @@ async def my_handler(ctx: HumanHelpContext) -> str:
 async with LLMBrowser(headless=True) as browser:
     toolkit = BrowserToolkit(browser, on_human_needed=my_handler)
     # 'request_human_help' is now part of all adapter outputs
-    tools = toolkit.as_anthropic_tools()   # 26 tools (25 base + request_human_help)
+    tools = toolkit.as_anthropic_tools()   # 31 tools (30 base + request_human_help)
 ```
 
 **Common patterns:**
@@ -571,11 +586,53 @@ async with LLMBrowser(headless=True) as browser:
     print(browser.active_tab)   # index of the active tab
 ```
 
-Multi-tab tools are included in all 25 base tools, so agents can manage tabs without any extra configuration.
+Multi-tab tools are included in all 30 base tools, so agents can manage tabs without any extra configuration.
 
 ---
 
-### Remote Browser via CDP
+### Connecting to an Existing Browser
+
+#### Auto-detect a running browser
+
+If you've already launched Chrome with `--remote-debugging-port`, use `find_browser()` to grab the WebSocket URL automatically:
+
+```bash
+# First, start Chrome with remote debugging enabled
+google-chrome --remote-debugging-port=9222
+```
+
+```python
+# Then connect to it
+url = await LLMBrowser.find_browser()          # scans port 9222 by default
+url = await LLMBrowser.find_browser(port=9223) # custom port
+
+async with LLMBrowser(remote_cdp_url=url) as browser:
+    state = await browser.get_state()
+```
+
+#### Launch & attach to system Chrome
+
+`attach()` finds your system-installed Chrome/Edge, launches it with CDP enabled, and returns a ready `LLMBrowser` — no manual subprocess management needed:
+
+```python
+# Fresh temporary profile (default, headless=False so you can see the window)
+async with await LLMBrowser.attach() as browser:
+    await browser.navigate("https://example.com")
+
+# Use your real Chrome profile — inherits saved logins and cookies
+async with await LLMBrowser.attach(
+    profile_dir="~/Library/Application Support/Google/Chrome"  # macOS
+) as browser:
+    await browser.navigate("https://gmail.com")
+
+# Headless with a custom port
+async with await LLMBrowser.attach(port=9223, headless=True) as browser:
+    state = await browser.get_state()
+```
+
+The subprocess is automatically terminated when the `async with` block exits.
+
+#### Remote Browser via CDP
 
 Connect to a browser running on a managed service (Browserbase, Anchor, Bright Data) or your own remote infrastructure instead of launching one locally. Pass the service's CDP WebSocket URL and everything else works identically.
 
@@ -593,7 +650,7 @@ async with LLMBrowser(remote_cdp_url="ws://localhost:9222") as browser:
     await browser.navigate("https://example.com")
 ```
 
-**What still works with `remote_cdp_url`:** `stealth`, `session_file`, `viewport`, `user_agent`, `on_captcha_detected`, all 25 tools, HITL, multi-tab.
+**What still works with `remote_cdp_url`:** `stealth`, `session_file`, `viewport`, `user_agent`, `on_captcha_detected`, all 30 tools, HITL, multi-tab.
 
 **What is ignored:** `browser`, `headless`, `slow_mo`, `proxy` (the remote browser controls its own network — a warning is logged if `proxy` is also set).
 

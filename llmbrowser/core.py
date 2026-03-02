@@ -20,7 +20,7 @@ from .injector import ANNOTATION_JS, CLEANUP_JS
 from .dom_extractor import DOM_EXTRACTION_JS, INTERACTIVE_ELEMENTS_JS
 from .schemas import BrowserAction, CaptchaContext, PageState
 from .exceptions import NavigationError, ActionExecutionError, ElementNotFoundError, PageNotReadyError
-from .utils import screenshot_to_base64, safe_wait
+from .utils import screenshot_to_base64, safe_wait, find_chrome_binary
 
 logger = logging.getLogger(__name__)
 
@@ -508,6 +508,9 @@ class LLMBrowser:
         # File tracking
         self._downloads: list[str] = []
 
+        # Subprocess owned by attach() — terminated on close()
+        self._subprocess = None
+
     # ------------------------------------------------------------------
     # _page property — always points to the currently active tab
     # ------------------------------------------------------------------
@@ -659,6 +662,9 @@ class LLMBrowser:
             if self._playwright:
                 await self._playwright.stop()
             self._pages.clear()
+            if self._subprocess is not None:
+                self._subprocess.terminate()
+                logger.info("Attached browser subprocess terminated.")
             logger.info("Browser closed.")
         except Exception as e:
             logger.warning("Error during browser close: %s", e)
@@ -669,6 +675,151 @@ class LLMBrowser:
 
     async def __aexit__(self, *args):
         await self.close()
+
+    # ------------------------------------------------------------------
+    # Class methods — connect to / launch an existing browser
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def find_browser(cls, port: int = 9222) -> str:
+        """
+        Detect a Chromium-based browser with CDP already running on localhost.
+
+        Returns the WebSocket debugger URL, ready to pass as ``remote_cdp_url=``.
+        Raises ``RuntimeError`` if no browser is found on the given port.
+
+        Usage::
+
+            url = await LLMBrowser.find_browser()
+            async with LLMBrowser(remote_cdp_url=url) as b:
+                state = await b.get_state()
+
+        To expose CDP on an existing Chrome window::
+
+            google-chrome --remote-debugging-port=9222
+            # or: chromium --remote-debugging-port=9222
+        """
+        import urllib.request
+        import urllib.error
+
+        endpoint = f"http://localhost:{port}/json/version"
+        try:
+            with urllib.request.urlopen(endpoint, timeout=3) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.URLError:
+            raise RuntimeError(
+                f"No browser found on localhost:{port}.\n"
+                f"Start Chrome with:  google-chrome --remote-debugging-port={port}\n"
+                f"           or:      chromium --remote-debugging-port={port}"
+            )
+
+        ws_url = data.get("webSocketDebuggerUrl")
+        if not ws_url:
+            raise RuntimeError(
+                f"CDP endpoint at localhost:{port} did not return a webSocketDebuggerUrl. "
+                "Try restarting the browser with --remote-debugging-port."
+            )
+        logger.info("Found browser via CDP at %s", ws_url)
+        return ws_url
+
+    @classmethod
+    async def _wait_for_cdp(cls, port: int, timeout: float = 15.0) -> str:
+        """Poll localhost until the CDP endpoint is ready; return the WebSocket URL."""
+        import time
+        deadline = time.monotonic() + timeout
+        last_err: Exception = RuntimeError("timeout")
+        while time.monotonic() < deadline:
+            try:
+                return await cls.find_browser(port=port)
+            except RuntimeError as exc:
+                last_err = exc
+                await asyncio.sleep(0.5)
+        raise RuntimeError(
+            f"Timed out waiting for browser CDP on port {port} after {timeout}s. "
+            f"Last error: {last_err}"
+        )
+
+    @classmethod
+    async def attach(
+        cls,
+        port: int = 9222,
+        binary: Optional[str] = None,
+        profile_dir: Optional[str] = None,
+        headless: bool = False,
+        **kwargs,
+    ) -> "LLMBrowser":
+        """
+        Launch the system-installed Chrome/Edge with CDP enabled and return a
+        ready ``LLMBrowser`` connected to it.
+
+        The launched subprocess is owned by the returned instance and is
+        automatically terminated when ``close()`` / ``async with`` exits.
+
+        Args:
+            port:        CDP port to open on the launched browser (default 9222).
+            binary:      Explicit path to the Chrome/Edge executable.
+                         Auto-detected from standard installation paths if None.
+            profile_dir: Path to a Chrome ``--user-data-dir`` directory.
+                         Use your real profile (e.g. ``~/Library/Application Support/Google/Chrome``)
+                         to inherit saved logins and cookies.
+                         A fresh temporary profile is created when None.
+            headless:    Run the launched browser in headless mode (default False).
+            **kwargs:    Forwarded to ``LLMBrowser()`` — e.g. ``stealth=True``,
+                         ``timeout=60_000``.  ``browser=``, ``slow_mo=``, and
+                         ``proxy=`` are ignored (CDP connection controls networking).
+
+        Usage::
+
+            # Attach with a fresh profile (no window shown by default)
+            async with await LLMBrowser.attach() as b:
+                await b.navigate("https://example.com")
+                state = await b.get_state()
+
+            # Use your real logged-in Chrome profile
+            async with await LLMBrowser.attach(
+                profile_dir="~/Library/Application Support/Google/Chrome"
+            ) as b:
+                ...
+        """
+        import subprocess as _sp
+        import tempfile
+
+        exe = binary or find_chrome_binary()
+        if not exe:
+            raise RuntimeError(
+                "Could not find a Chrome, Chromium, or Edge binary on this system.\n"
+                "Install Google Chrome or pass binary='/path/to/chrome' explicitly."
+            )
+
+        cmd: list[str] = [
+            exe,
+            f"--remote-debugging-port={port}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+        ]
+        if headless:
+            cmd.append("--headless=new")
+
+        if profile_dir:
+            cmd.append(f"--user-data-dir={Path(profile_dir).expanduser()}")
+        else:
+            tmp_dir = tempfile.mkdtemp(prefix="llmbrowser_attach_")
+            cmd.append(f"--user-data-dir={tmp_dir}")
+
+        logger.info("Launching browser for attach: %s (port %d)", exe, port)
+        proc = _sp.Popen(cmd, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+
+        try:
+            ws_url = await cls._wait_for_cdp(port, timeout=15.0)
+        except RuntimeError:
+            proc.terminate()
+            raise
+
+        instance = cls(remote_cdp_url=ws_url, **kwargs)
+        instance._subprocess = proc
+        await instance._start()
+        return instance
 
     # ------------------------------------------------------------------
     # Session persistence
@@ -1471,9 +1622,16 @@ class LLMBrowser:
                 for c in cookies
             )
         if action == "set":
-            await self._context.add_cookies(
-                [{"name": name, "value": value, "url": self._page.url, "path": path}]
-            )
+            # Playwright requires either `url` OR `domain`+`path` — not both.
+            url = self._page.url
+            from urllib.parse import urlparse as _urlparse
+            parsed = _urlparse(url)
+            if parsed.scheme in ("http", "https"):
+                cookie_entry: dict = {"name": name, "value": value, "url": url}
+            else:
+                # Fallback for special pages (about:blank, chrome-error, etc.)
+                cookie_entry = {"name": name, "value": value, "domain": "localhost", "path": path}
+            await self._context.add_cookies([cookie_entry])
             logger.info("Set cookie '%s'", name)
             return f"Set cookie '{name}'='{value}'"
         if action == "delete":
@@ -1526,3 +1684,70 @@ class LLMBrowser:
 
         self._page.once("dialog", _handler)
         logger.info("Dialog handler registered — action=%s", action)
+
+    async def drag_and_drop(self, source_id: int, target_id: int) -> None:
+        """Drag an element onto another element by their numeric llm-ids."""
+        await self._inject_annotations()
+        source = await self._find_element(source_id)
+        target = await self._find_element(target_id)
+        await source.scroll_into_view_if_needed()
+        await source.drag_to(target, timeout=10_000)
+        await safe_wait(self._page)
+        logger.info("Dragged element id=%d onto id=%d", source_id, target_id)
+
+    async def take_element_screenshot(self, element_id: int) -> str:
+        """
+        Screenshot a single element and return the result as a base64-encoded PNG.
+        """
+        await self._inject_annotations()
+        locator = await self._find_element(element_id)
+        await locator.scroll_into_view_if_needed()
+        png_bytes = await locator.screenshot()
+        import base64
+        b64 = base64.b64encode(png_bytes).decode()
+        logger.info("Element screenshot taken for id=%d (%d bytes)", element_id, len(png_bytes))
+        return b64
+
+    async def switch_frame(self, frame_id: Optional[str] = None, url_pattern: Optional[str] = None) -> str:
+        """
+        List all iframes or return the frame_id needed to interact with elements
+        inside a specific iframe.  Does NOT switch context globally — elements
+        inside iframes are already accessible via their frame_id in page state.
+        Returns a summary of all frames on the page.
+        """
+        frames = self._page.frames
+        lines = [f"FRAMES ON PAGE ({len(frames)} total):"]
+        for i, frame in enumerate(frames):
+            marker = " ◀ main" if frame == self._page.main_frame else ""
+            lines.append(f"  [{i}] url={frame.url!r} name={frame.name!r}{marker}")
+        if frame_id:
+            lines.append(f"\nTo interact with elements in frame '{frame_id}', "
+                         f"use the element IDs from get_page_state — "
+                         f"iframes are already annotated automatically.")
+        return "\n".join(lines)
+
+    async def set_geolocation(
+        self,
+        latitude: float,
+        longitude: float,
+        accuracy: float = 100.0,
+    ) -> None:
+        """Override the browser's reported geolocation."""
+        await self._context.set_geolocation(
+            {"latitude": latitude, "longitude": longitude, "accuracy": accuracy}
+        )
+        await self._context.grant_permissions(["geolocation"])
+        logger.info("Geolocation set to lat=%.4f lon=%.4f", latitude, longitude)
+
+    async def export_pdf(self, path: Optional[str] = None) -> str:
+        """
+        Export the current page as a PDF. Returns the file path.
+        Requires a headless Chromium browser (not supported on Firefox/WebKit).
+        """
+        if path is None:
+            self._download_dir.mkdir(parents=True, exist_ok=True)
+            import time as _time
+            path = str(self._download_dir / f"export_{int(_time.time())}.pdf")
+        await self._page.pdf(path=path)
+        logger.info("PDF exported to %s", path)
+        return path

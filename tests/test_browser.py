@@ -479,33 +479,31 @@ class TestFileHandling:
 
 class TestGoForwardReload:
     async def test_go_forward(self, browser):
+        # Use two real navigations so history is clean (no chrome-error bleed)
         await browser.navigate("https://example.com")
-        await load_html(browser, BASIC_HTML)
+        await browser.navigate("https://www.iana.org/domains/reserved")
         await browser.go_back()
         await browser.go_forward()
-        # After going forward we should be back on the local HTML page
-        assert browser.current_url is not None
+        assert "iana.org" in browser.current_url
 
     async def test_reload_resets_js_state(self, browser):
-        await load_html(browser, BASIC_HTML)
-        # Mutate the DOM with JS
+        await browser.navigate("https://example.com")
+        original_title = await browser._page.title()
         await browser._page.evaluate("document.title = 'mutated'")
         assert await browser._page.title() == "mutated"
         await browser.reload()
-        # After reload, set_content-based pages reset to their original title
-        title = await browser._page.title()
-        assert title != "mutated" or title == ""   # either reset or blank
+        assert await browser._page.title() == original_title
 
     async def test_toolkit_go_forward(self, browser):
         await browser.navigate("https://example.com")
-        await load_html(browser, BASIC_HTML)
+        await browser.navigate("https://www.iana.org/domains/reserved")
         tk = BrowserToolkit(browser)
         await tk.execute("go_back")
         result = await tk.execute("go_forward")
         assert "URL:" in result
 
     async def test_toolkit_reload_page(self, browser):
-        await load_html(browser, BASIC_HTML)
+        await browser.navigate("https://example.com")
         tk = BrowserToolkit(browser)
         result = await tk.execute("reload_page")
         assert "URL:" in result
@@ -607,6 +605,8 @@ class TestHoverAndSelect:
 
 class TestManageStorage:
     async def test_localstorage_set_and_get(self, browser):
+        # Navigate first so the page is at a real URL where localStorage is available
+        await browser.navigate("https://example.com")
         await load_html(browser, BASIC_HTML)
         await browser.manage_storage("local", "set", key="foo", value="bar")
         result = await browser.manage_storage("local", "get", key="foo")
@@ -661,28 +661,30 @@ class TestManageStorage:
 
 class TestManageCookies:
     async def test_set_and_list_cookie(self, browser):
-        await load_html(browser, BASIC_HTML)
+        # Cookies require a real URL origin — set_content leaves page at about:blank
+        await browser.navigate("https://example.com")
+        await browser._context.clear_cookies()
         await browser.manage_cookies("set", name="test_cookie", value="cookie_val")
         result = await browser.manage_cookies("list")
         assert "test_cookie" in result
         assert "cookie_val" in result
 
     async def test_delete_cookie(self, browser):
-        await load_html(browser, BASIC_HTML)
+        await browser.navigate("https://example.com")
         await browser.manage_cookies("set", name="del_me", value="gone")
         await browser.manage_cookies("delete", name="del_me")
         result = await browser.manage_cookies("list")
         assert "del_me" not in result
 
     async def test_list_cookies_empty(self, browser):
-        await load_html(browser, BASIC_HTML)
-        # Clear all cookies first
+        await browser.navigate("https://example.com")
         await browser._context.clear_cookies()
         result = await browser.manage_cookies("list")
         assert result == "No cookies set."
 
     async def test_toolkit_manage_cookies(self, browser):
-        await load_html(browser, BASIC_HTML)
+        await browser.navigate("https://example.com")
+        await browser._context.clear_cookies()
         tk = BrowserToolkit(browser)
         await tk.execute("manage_cookies", action="set", name="tk_cookie", value="tk_val")
         result = await tk.execute("manage_cookies", action="list")
@@ -765,50 +767,43 @@ class TestGetElementAttribute:
 
 class TestHandleDialog:
     async def test_accept_alert(self, browser):
+        # Use CSS id selector — get_state() runs CLEANUP_JS which removes data-llm-id
         html = """<!DOCTYPE html><html><body>
-            <button onclick="alert('hello'); document.title='after_alert'">Alert</button>
+            <button id="btn" onclick="alert('hello'); document.title='after_alert'">Alert</button>
         </body></html>"""
         await load_html(browser, html)
-        state = await browser.get_state()
-        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
         browser.handle_next_dialog("accept")
-        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.click("#btn")
         await browser._page.wait_for_timeout(300)
         assert await browser._page.title() == "after_alert"
 
     async def test_dismiss_confirm(self, browser):
         html = """<!DOCTYPE html><html><body>
-            <button onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
+            <button id="btn" onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
         </body></html>"""
         await load_html(browser, html)
-        state = await browser.get_state()
-        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
         browser.handle_next_dialog("dismiss")
-        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.click("#btn")
         await browser._page.wait_for_timeout(300)
         assert await browser._page.title() == "no"
 
     async def test_accept_confirm(self, browser):
         html = """<!DOCTYPE html><html><body>
-            <button onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
+            <button id="btn" onclick="document.title = confirm('sure?') ? 'yes' : 'no'">Confirm</button>
         </body></html>"""
         await load_html(browser, html)
-        state = await browser.get_state()
-        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
         browser.handle_next_dialog("accept")
-        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.click("#btn")
         await browser._page.wait_for_timeout(300)
         assert await browser._page.title() == "yes"
 
     async def test_accept_prompt_with_text(self, browser):
         html = """<!DOCTYPE html><html><body>
-            <button onclick="document.title = prompt('name?')">Prompt</button>
+            <button id="btn" onclick="document.title = prompt('name?')">Prompt</button>
         </body></html>"""
         await load_html(browser, html)
-        state = await browser.get_state()
-        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
         browser.handle_next_dialog("accept", prompt_text="Alice")
-        await browser._page.click(f"[data-llm-id='{btn['id']}']")
+        await browser._page.click("#btn")
         await browser._page.wait_for_timeout(300)
         assert await browser._page.title() == "Alice"
 
@@ -817,3 +812,143 @@ class TestHandleDialog:
         tk = BrowserToolkit(browser)
         result = await tk.execute("handle_dialog", action="accept")
         assert "accept" in result
+
+
+# ── New tools — drag_and_drop ─────────────────────────────────────────────────
+
+class TestDragAndDrop:
+    async def test_drag_and_drop_fires_events(self, browser):
+        # Use <button> elements — always annotated by ANNOTATION_JS
+        html = """<!DOCTYPE html><html><body>
+            <button id="src" draggable="true"
+                    ondragstart="window._dragged=true"
+                    style="width:80px;height:40px">drag</button>
+            <button id="tgt"
+                    ondrop="document.title='dropped'"
+                    ondragover="event.preventDefault()"
+                    style="width:80px;height:40px;margin-top:20px">drop</button>
+        </body></html>"""
+        await load_html(browser, html)
+        state = await browser.get_state()
+        src = next(e for e in state.interactive_elements if e.get("text") == "drag")
+        tgt = next(e for e in state.interactive_elements if e.get("text") == "drop")
+        await browser.drag_and_drop(src["id"], tgt["id"])
+        assert await browser._page.title() == "dropped"
+
+    async def test_toolkit_drag_and_drop(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <button id="src" draggable="true"
+                    ondragstart="window._d=1"
+                    style="width:80px;height:40px">A</button>
+            <button id="tgt"
+                    ondrop="document.title='ok'"
+                    ondragover="event.preventDefault()"
+                    style="width:80px;height:40px;margin-top:20px">B</button>
+        </body></html>"""
+        await load_html(browser, html)
+        tk = BrowserToolkit(browser)
+        state = await browser.get_state()
+        src = next(e for e in state.interactive_elements if e.get("text") == "A")
+        tgt = next(e for e in state.interactive_elements if e.get("text") == "B")
+        result = await tk.execute("drag_and_drop", source_id=src["id"], target_id=tgt["id"])
+        assert "URL:" in result
+
+
+# ── New tools — take_element_screenshot ──────────────────────────────────────
+
+class TestTakeElementScreenshot:
+    async def test_returns_base64_png(self, browser):
+        await load_html(browser, BASIC_HTML)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        b64 = await browser.take_element_screenshot(btn["id"])
+        import base64
+        # Must be valid base64 that decodes to a PNG
+        raw = base64.b64decode(b64)
+        assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+
+    async def test_toolkit_returns_summary(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        state = await browser.get_state()
+        btn = next(e for e in state.interactive_elements if e["tag"] == "button")
+        result = await tk.execute("take_element_screenshot", element_id=btn["id"])
+        assert "base64 PNG" in result
+
+
+# ── New tools — switch_frame ──────────────────────────────────────────────────
+
+class TestSwitchFrame:
+    async def test_lists_main_frame(self, browser):
+        await load_html(browser, BASIC_HTML)
+        result = await browser.switch_frame()
+        assert "FRAMES ON PAGE" in result
+        assert "main" in result
+
+    async def test_lists_iframes(self, browser):
+        html = """<!DOCTYPE html><html><body>
+            <iframe src="about:blank" name="inner"></iframe>
+        </body></html>"""
+        await load_html(browser, html)
+        result = await browser.switch_frame()
+        assert "2 total" in result
+
+    async def test_toolkit_switch_frame(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        result = await tk.execute("switch_frame")
+        assert "FRAMES ON PAGE" in result
+
+
+# ── New tools — set_geolocation ───────────────────────────────────────────────
+
+class TestSetGeolocation:
+    async def test_geolocation_reported_correctly(self, browser):
+        await load_html(browser, BASIC_HTML)
+        await browser.set_geolocation(37.7749, -122.4194)
+        coords = await browser._page.evaluate("""() =>
+            new Promise(resolve =>
+                navigator.geolocation.getCurrentPosition(
+                    p => resolve({lat: p.coords.latitude, lon: p.coords.longitude}),
+                    () => resolve(null)
+                )
+            )
+        """)
+        assert coords is not None
+        assert abs(coords["lat"] - 37.7749) < 0.001
+        assert abs(coords["lon"] - (-122.4194)) < 0.001
+
+    async def test_toolkit_set_geolocation(self, browser):
+        await load_html(browser, BASIC_HTML)
+        tk = BrowserToolkit(browser)
+        result = await tk.execute("set_geolocation", latitude=51.5074, longitude=-0.1278)
+        assert "51.5074" in result
+        assert "-0.1278" in result
+
+
+# ── New tools — export_pdf ────────────────────────────────────────────────────
+
+class TestExportPdf:
+    async def test_creates_pdf_file(self, browser, tmp_path):
+        await browser.navigate("https://example.com")
+        path = str(tmp_path / "page.pdf")
+        saved = await browser.export_pdf(path=path)
+        import os
+        assert saved == path
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 1000   # non-trivial PDF
+
+    async def test_default_path_in_download_dir(self, browser):
+        await browser.navigate("https://example.com")
+        saved = await browser.export_pdf()
+        import os
+        assert saved.endswith(".pdf")
+        assert os.path.exists(saved)
+
+    async def test_toolkit_export_pdf(self, browser, tmp_path):
+        await browser.navigate("https://example.com")
+        tk = BrowserToolkit(browser)
+        path = str(tmp_path / "tk.pdf")
+        result = await tk.execute("export_pdf", path=path)
+        assert "PDF saved to:" in result
+        assert path in result

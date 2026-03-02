@@ -117,6 +117,180 @@ class TestRemoteCDP:
         assert b._stealth is True
         assert b._session_file == "/tmp/session.json"
 
+    def test_subprocess_default_is_none(self):
+        b = LLMBrowser()
+        assert b._subprocess is None
+
+
+# ── find_chrome_binary ────────────────────────────────────────────────────────
+
+class TestFindChromeBinary:
+    def test_returns_string_or_none(self):
+        from llmbrowser.utils import find_chrome_binary
+        result = find_chrome_binary()
+        assert result is None or isinstance(result, str)
+
+    def test_returns_existing_path_when_found(self):
+        from llmbrowser.utils import find_chrome_binary
+        result = find_chrome_binary()
+        if result is not None:
+            from pathlib import Path
+            assert Path(result).exists()
+
+    def test_mock_binary_found_via_path(self, monkeypatch):
+        import shutil
+        from llmbrowser.utils import find_chrome_binary
+        monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None)
+        result = find_chrome_binary()
+        assert result == "/usr/bin/google-chrome"
+
+    def test_mock_returns_none_when_nothing_found(self, monkeypatch):
+        import shutil
+        import sys
+        from pathlib import Path
+        from llmbrowser.utils import find_chrome_binary
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+        monkeypatch.setattr(Path, "exists", lambda self: False)
+        result = find_chrome_binary()
+        assert result is None
+
+
+# ── find_browser + attach (mocked) ───────────────────────────────────────────
+
+class TestFindBrowser:
+    async def test_find_browser_raises_when_port_closed(self):
+        """Should raise RuntimeError when nothing is listening on the port."""
+        with pytest.raises(RuntimeError, match="No browser found"):
+            await LLMBrowser.find_browser(port=19222)  # unlikely to be in use
+
+    async def test_find_browser_mocked(self, monkeypatch):
+        import urllib.request
+        import io
+
+        fake_response = b'{"webSocketDebuggerUrl": "ws://localhost:9222/devtools/browser/abc"}'
+
+        class FakeResponse:
+            def read(self): return fake_response
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: FakeResponse())
+        ws = await LLMBrowser.find_browser(port=9222)
+        assert ws == "ws://localhost:9222/devtools/browser/abc"
+
+    async def test_find_browser_raises_when_no_ws_url(self, monkeypatch):
+        import urllib.request
+
+        class FakeResponse:
+            def read(self): return b'{"Browser": "Chrome/120"}'
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: FakeResponse())
+        with pytest.raises(RuntimeError, match="webSocketDebuggerUrl"):
+            await LLMBrowser.find_browser(port=9222)
+
+
+class TestAttach:
+    async def test_attach_raises_when_no_binary(self, monkeypatch):
+        from llmbrowser import utils
+        monkeypatch.setattr(utils, "find_chrome_binary", lambda: None)
+        with pytest.raises(RuntimeError, match="Could not find"):
+            await LLMBrowser.attach(binary=None)
+
+    async def test_attach_uses_explicit_binary(self, monkeypatch):
+        import subprocess as sp
+        from llmbrowser import utils
+
+        launched = {}
+
+        class FakeProc:
+            def terminate(self): pass
+
+        def fake_popen(cmd, stdout=None, stderr=None):
+            launched["cmd"] = cmd
+            return FakeProc()
+
+        async def fake_wait_for_cdp(port, timeout=15.0):
+            return "ws://localhost:9222/devtools/browser/xyz"
+
+        async def fake_start(self):
+            self._pages = []
+
+        monkeypatch.setattr(sp, "Popen", fake_popen)
+        monkeypatch.setattr(LLMBrowser, "_wait_for_cdp", fake_wait_for_cdp)
+        monkeypatch.setattr(LLMBrowser, "_start", fake_start)
+
+        b = await LLMBrowser.attach(binary="/usr/bin/fake-chrome", port=9222)
+        assert launched["cmd"][0] == "/usr/bin/fake-chrome"
+        assert "--remote-debugging-port=9222" in launched["cmd"]
+        assert b._remote_cdp_url == "ws://localhost:9222/devtools/browser/xyz"
+        assert b._subprocess is not None
+
+    async def test_attach_headless_flag(self, monkeypatch):
+        import subprocess as sp
+
+        launched = {}
+
+        class FakeProc:
+            def terminate(self): pass
+
+        monkeypatch.setattr(sp, "Popen", lambda cmd, **kw: (launched.__setitem__("cmd", cmd), FakeProc())[1])
+
+        async def fake_wait_for_cdp(port, timeout=15.0):
+            return "ws://localhost:9222/devtools/browser/xyz"
+
+        async def fake_start(self):
+            self._pages = []
+
+        monkeypatch.setattr(LLMBrowser, "_wait_for_cdp", fake_wait_for_cdp)
+        monkeypatch.setattr(LLMBrowser, "_start", fake_start)
+
+        await LLMBrowser.attach(binary="/usr/bin/fake-chrome", headless=True)
+        assert "--headless=new" in launched["cmd"]
+
+    async def test_attach_no_headless_by_default(self, monkeypatch):
+        import subprocess as sp
+
+        launched = {}
+
+        class FakeProc:
+            def terminate(self): pass
+
+        monkeypatch.setattr(sp, "Popen", lambda cmd, **kw: (launched.__setitem__("cmd", cmd), FakeProc())[1])
+
+        async def fake_wait_for_cdp(port, timeout=15.0):
+            return "ws://localhost:9222/devtools/browser/xyz"
+
+        async def fake_start(self):
+            self._pages = []
+
+        monkeypatch.setattr(LLMBrowser, "_wait_for_cdp", fake_wait_for_cdp)
+        monkeypatch.setattr(LLMBrowser, "_start", fake_start)
+
+        await LLMBrowser.attach(binary="/usr/bin/fake-chrome")
+        assert "--headless=new" not in launched["cmd"]
+
+    async def test_attach_terminates_proc_on_cdp_timeout(self, monkeypatch):
+        import subprocess as sp
+
+        terminated = {}
+
+        class FakeProc:
+            def terminate(self): terminated["called"] = True
+
+        monkeypatch.setattr(sp, "Popen", lambda cmd, **kw: FakeProc())
+
+        async def fake_wait_for_cdp(port, timeout=15.0):
+            raise RuntimeError("Timed out")
+
+        monkeypatch.setattr(LLMBrowser, "_wait_for_cdp", fake_wait_for_cdp)
+
+        with pytest.raises(RuntimeError, match="Timed out"):
+            await LLMBrowser.attach(binary="/usr/bin/fake-chrome")
+
+        assert terminated.get("called") is True
+
 
 # ── BrowserAction schema ──────────────────────────────────────────────────────
 
@@ -218,7 +392,7 @@ class TestDataclasses:
 
 class TestToolSchemas:
     def test_base_count(self):
-        assert len(BrowserToolkit.BASE_TOOLS) == 25
+        assert len(BrowserToolkit.BASE_TOOLS) == 30
 
     def test_all_have_required_keys(self):
         tk = BrowserToolkit(_FakeBrowser())
@@ -236,6 +410,8 @@ class TestToolSchemas:
             "upload_file", "get_downloads", "read_file", "dismiss_dialogs",
             "manage_storage", "manage_cookies", "execute_script",
             "get_element_attribute", "handle_dialog",
+            "drag_and_drop", "take_element_screenshot",
+            "switch_frame", "set_geolocation", "export_pdf",
         }
 
 
@@ -250,7 +426,7 @@ class TestToolsAllowlist:
 
     def test_none_means_all_tools(self):
         tk = BrowserToolkit(_FakeBrowser(), tools=None)
-        assert len(tk.as_anthropic_tools()) == 25
+        assert len(tk.as_anthropic_tools()) == 30
 
     def test_invalid_tool_name_raises(self):
         with pytest.raises(ValueError, match="Unknown tool"):
@@ -286,7 +462,7 @@ class TestAdapters:
     def test_anthropic_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 25
+        assert len(tools) == 30
         for t in tools:
             assert "name" in t
             assert "description" in t
@@ -295,7 +471,7 @@ class TestAdapters:
     def test_openai_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_openai_tools()
-        assert len(tools) == 25
+        assert len(tools) == 30
         for t in tools:
             assert t["type"] == "function"
             assert "name" in t["function"]
@@ -307,12 +483,12 @@ class TestAdapters:
         tools = tk.as_google_tools()
         assert len(tools) == 1
         decls = tools[0]["function_declarations"]
-        assert len(decls) == 25
+        assert len(decls) == 30
 
     def test_bedrock_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_bedrock_tools()
-        assert len(tools) == 25
+        assert len(tools) == 30
         for t in tools:
             assert "toolSpec" in t
             assert "name" in t["toolSpec"]
@@ -322,26 +498,26 @@ class TestAdapters:
 # ── HITL / CAPTCHA tool inclusion ─────────────────────────────────────────────
 
 class TestOptionalTools:
-    def test_no_callbacks_gives_25_tools(self):
+    def test_no_callbacks_gives_30_tools(self):
         tk = BrowserToolkit(_FakeBrowser())
-        assert len(tk.get_tools()) == 25
-        assert len(tk.as_anthropic_tools()) == 25
+        assert len(tk.get_tools()) == 30
+        assert len(tk.as_anthropic_tools()) == 30
 
     def test_captcha_callback_adds_solve_captcha(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha())
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 26
+        assert len(tools) == 31
         assert any(t["name"] == "solve_captcha" for t in tools)
 
     def test_hitl_callback_adds_request_human_help(self):
         tk = BrowserToolkit(_FakeBrowser(), on_human_needed=_fake_hitl)
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 26
+        assert len(tools) == 31
         assert any(t["name"] == "request_human_help" for t in tools)
 
-    def test_both_callbacks_give_27_tools(self):
+    def test_both_callbacks_give_32_tools(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha(), on_human_needed=_fake_hitl)
-        assert len(tk.as_anthropic_tools()) == 27
+        assert len(tk.as_anthropic_tools()) == 32
 
     def test_captcha_tool_in_all_adapters(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha())

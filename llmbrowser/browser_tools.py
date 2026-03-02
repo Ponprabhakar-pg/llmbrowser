@@ -57,6 +57,8 @@ class BrowserToolkit:
         "upload_file", "get_downloads", "read_file", "dismiss_dialogs",
         "manage_storage", "manage_cookies", "execute_script",
         "get_element_attribute", "handle_dialog",
+        "drag_and_drop", "take_element_screenshot",
+        "switch_frame", "set_geolocation", "export_pdf",
     })
 
     def __init__(
@@ -857,6 +859,144 @@ class BrowserToolkit:
             },
         )
 
+        async def drag_and_drop(source_id: int, target_id: int) -> str:
+            await browser.drag_and_drop(source_id, target_id)
+            state = await browser.get_state(mode=mode)
+            return _format_state(state)
+        drag_and_drop = _spec(drag_and_drop,
+            description=(
+                "Drag one element onto another. "
+                "Use this for Kanban cards, sortable lists, file-drop zones, "
+                "sliders, and any drag-and-drop interaction."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "source_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the element to drag.",
+                    },
+                    "target_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the element to drop onto.",
+                    },
+                },
+                "required": ["source_id", "target_id"],
+            },
+        )
+
+        async def take_element_screenshot(element_id: int) -> str:
+            b64 = await browser.take_element_screenshot(element_id)
+            return f"Element screenshot (base64 PNG, {len(b64)} chars): {b64[:80]}…"
+        take_element_screenshot = _spec(take_element_screenshot,
+            description=(
+                "Take a screenshot of a single element and return it as a base64-encoded PNG. "
+                "Use this to visually inspect a chart, image, or specific UI component "
+                "without capturing the whole page."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "element_id": {
+                        "type": "integer",
+                        "description": "Numeric ID of the element to screenshot.",
+                    },
+                },
+                "required": ["element_id"],
+            },
+        )
+
+        async def switch_frame(
+            frame_id: Optional[str] = None,
+            url_pattern: Optional[str] = None,
+        ) -> str:
+            return await browser.switch_frame(frame_id=frame_id, url_pattern=url_pattern)
+        switch_frame = _spec(switch_frame,
+            description=(
+                "List all iframes on the current page. "
+                "Use this to discover embedded widgets (payment forms, maps, videos). "
+                "Elements inside iframes are already annotated by get_page_state — "
+                "you do not need to switch context to interact with them."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "frame_id": {
+                        "type": "string",
+                        "description": "Optional frame ID to get details about a specific frame.",
+                    },
+                    "url_pattern": {
+                        "type": "string",
+                        "description": "Optional URL substring to filter frames by.",
+                    },
+                },
+            },
+        )
+
+        async def set_geolocation(
+            latitude: float,
+            longitude: float,
+            accuracy: float = 100.0,
+        ) -> str:
+            await browser.set_geolocation(latitude, longitude, accuracy=accuracy)
+            return (
+                f"Geolocation set to lat={latitude}, lon={longitude} "
+                f"(accuracy={accuracy}m). Reload the page for location-aware content to update."
+            )
+        set_geolocation = _spec(set_geolocation,
+            description=(
+                "Override the browser's reported GPS location. "
+                "Use this before visiting location-aware pages (store finders, "
+                "weather apps, maps). Call reload_page after to apply the new location."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "latitude": {
+                        "type": "number",
+                        "description": "Latitude in decimal degrees (e.g. 37.7749 for San Francisco).",
+                        "minimum": -90,
+                        "maximum": 90,
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "description": "Longitude in decimal degrees (e.g. -122.4194 for San Francisco).",
+                        "minimum": -180,
+                        "maximum": 180,
+                    },
+                    "accuracy": {
+                        "type": "number",
+                        "description": "Accuracy in metres. Default: 100.",
+                        "minimum": 0,
+                    },
+                },
+                "required": ["latitude", "longitude"],
+            },
+        )
+
+        async def export_pdf(path: Optional[str] = None) -> str:
+            saved_path = await browser.export_pdf(path=path)
+            return f"PDF saved to: {saved_path}"
+        export_pdf = _spec(export_pdf,
+            description=(
+                "Export the current page as a PDF file. "
+                "Returns the path where the PDF was saved. "
+                "Only works with Chromium in headless mode."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "File path to save the PDF. "
+                            "If omitted, saved to ~/.llmbrowser/downloads/export_<timestamp>.pdf"
+                        ),
+                    },
+                },
+            },
+        )
+
         tools = [
             navigate, get_page_state, click_element, type_text, press_key,
             scroll_page, go_back, go_forward, reload_page, hover_element,
@@ -865,6 +1005,8 @@ class BrowserToolkit:
             dismiss_dialogs, upload_file, get_downloads, read_file,
             manage_storage, manage_cookies, execute_script,
             get_element_attribute, handle_dialog,
+            drag_and_drop, take_element_screenshot,
+            switch_frame, set_geolocation, export_pdf,
         ]
 
         # TOTP tool — only included when a TOTP secret is configured.

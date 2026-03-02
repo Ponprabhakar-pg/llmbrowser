@@ -1,5 +1,9 @@
 import base64
 import logging
+import shutil
+import sys
+from pathlib import Path
+from typing import Optional
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
@@ -40,6 +44,57 @@ _SETTLE_JS = """
     hardTimer = setTimeout(finish, timeoutMs); // safety valve
 })
 """
+
+
+def find_chrome_binary() -> Optional[str]:
+    """
+    Locate the system-installed Chrome, Chromium, or Edge binary.
+
+    Checks OS-specific installation paths first, then falls back to PATH lookup.
+    Returns the path string, or None if nothing is found.
+    """
+    if sys.platform == "darwin":
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+        path_names = ["google-chrome", "chromium", "chromium-browser"]
+    elif sys.platform == "win32":
+        import os
+        pf   = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        pf86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        lad  = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            rf"{pf}\Google\Chrome\Application\chrome.exe",
+            rf"{pf86}\Google\Chrome\Application\chrome.exe",
+            rf"{lad}\Google\Chrome\Application\chrome.exe",
+            rf"{pf}\Microsoft\Edge\Application\msedge.exe",
+            rf"{pf86}\Microsoft\Edge\Application\msedge.exe",
+        ]
+        path_names = ["chrome", "msedge"]
+    else:  # Linux / other POSIX
+        candidates = []
+        path_names = [
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "microsoft-edge",
+            "microsoft-edge-stable",
+        ]
+
+    for path in candidates:
+        if Path(path).exists():
+            return path
+
+    for name in path_names:
+        found = shutil.which(name)
+        if found:
+            return found
+
+    return None
 
 
 def screenshot_to_base64(screenshot_bytes: bytes) -> str:
