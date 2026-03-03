@@ -59,6 +59,7 @@ class BrowserToolkit:
         "get_element_attribute", "handle_dialog",
         "drag_and_drop", "take_element_screenshot",
         "switch_frame", "set_geolocation", "export_pdf",
+        "get_bookmarks", "get_history",
     })
 
     def __init__(
@@ -997,6 +998,49 @@ class BrowserToolkit:
             },
         )
 
+        async def get_bookmarks(folder: Optional[str] = None) -> str:
+            return await browser.get_bookmarks(folder=folder)
+        get_bookmarks = _spec(get_bookmarks,
+            description=(
+                "Read bookmarks from the connected browser profile. "
+                "Returns all bookmarks with title, URL, and folder path. "
+                "Only works when connected via attach() or connect_or_attach() with user_data_dir set. "
+                "Use the folder parameter to filter by a specific bookmark folder name."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "folder": {
+                        "type": "string",
+                        "description": "Optional folder name to filter by (case-insensitive substring match). Omit to return all bookmarks.",
+                    },
+                },
+            },
+        )
+
+        async def get_history(limit: int = 50, search: Optional[str] = None) -> str:
+            return await browser.get_history(limit=limit, search=search)
+        get_history = _spec(get_history,
+            description=(
+                "Read recent browser history from the connected profile. "
+                "Returns page titles, URLs, last visit times, and visit counts. "
+                "Only works when connected via attach() or connect_or_attach() with user_data_dir set."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of history entries to return (default 50, max 500).",
+                    },
+                    "search": {
+                        "type": "string",
+                        "description": "Optional substring to filter results by URL or page title.",
+                    },
+                },
+            },
+        )
+
         tools = [
             navigate, get_page_state, click_element, type_text, press_key,
             scroll_page, go_back, go_forward, reload_page, hover_element,
@@ -1007,6 +1051,7 @@ class BrowserToolkit:
             get_element_attribute, handle_dialog,
             drag_and_drop, take_element_screenshot,
             switch_frame, set_geolocation, export_pdf,
+            get_bookmarks, get_history,
         ]
 
         # TOTP tool — only included when a TOTP secret is configured.

@@ -292,6 +292,162 @@ class TestAttach:
         assert terminated.get("called") is True
 
 
+# ── get_bookmarks / get_history ───────────────────────────────────────────────
+
+class TestGetBookmarks:
+    def _make_browser(self, profile_path=None):
+        b = LLMBrowser()
+        b._profile_path = profile_path
+        return b
+
+    async def test_returns_not_available_without_profile_path(self):
+        b = self._make_browser()
+        result = await b.get_bookmarks()
+        assert "not available" in result.lower()
+
+    async def test_returns_not_found_when_file_missing(self, tmp_path):
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_bookmarks()
+        assert "not found" in result.lower()
+
+    async def test_reads_bookmarks_from_file(self, tmp_path):
+        import json as _json
+        bookmarks = {
+            "roots": {
+                "bookmark_bar": {
+                    "type": "folder",
+                    "name": "Bookmarks bar",
+                    "children": [
+                        {"type": "url", "name": "Example", "url": "https://example.com"},
+                        {
+                            "type": "folder",
+                            "name": "Work",
+                            "children": [
+                                {"type": "url", "name": "GitHub", "url": "https://github.com"},
+                            ],
+                        },
+                    ],
+                },
+                "other": {"type": "folder", "name": "Other", "children": []},
+                "synced": {"type": "folder", "name": "Mobile", "children": []},
+            }
+        }
+        (tmp_path / "Bookmarks").write_text(_json.dumps(bookmarks))
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_bookmarks()
+        assert "Example" in result
+        assert "https://example.com" in result
+        assert "GitHub" in result
+
+    async def test_folder_filter(self, tmp_path):
+        import json as _json
+        bookmarks = {
+            "roots": {
+                "bookmark_bar": {
+                    "type": "folder",
+                    "name": "Bookmarks bar",
+                    "children": [
+                        {"type": "url", "name": "Example", "url": "https://example.com"},
+                        {
+                            "type": "folder",
+                            "name": "Work",
+                            "children": [
+                                {"type": "url", "name": "GitHub", "url": "https://github.com"},
+                            ],
+                        },
+                    ],
+                }
+            }
+        }
+        (tmp_path / "Bookmarks").write_text(_json.dumps(bookmarks))
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_bookmarks(folder="Work")
+        assert "GitHub" in result
+        assert "Example" not in result
+
+    async def test_empty_bookmarks(self, tmp_path):
+        import json as _json
+        bookmarks = {"roots": {"bookmark_bar": {"type": "folder", "name": "bar", "children": []}}}
+        (tmp_path / "Bookmarks").write_text(_json.dumps(bookmarks))
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_bookmarks()
+        assert "no bookmarks found" in result.lower()
+
+
+class TestGetHistory:
+    def _make_browser(self, profile_path=None):
+        b = LLMBrowser()
+        b._profile_path = profile_path
+        return b
+
+    async def test_returns_not_available_without_profile_path(self):
+        b = self._make_browser()
+        result = await b.get_history()
+        assert "not available" in result.lower()
+
+    async def test_returns_not_found_when_file_missing(self, tmp_path):
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_history()
+        assert "not found" in result.lower()
+
+    async def test_reads_history_from_sqlite(self, tmp_path):
+        import sqlite3
+        from datetime import datetime, timedelta
+        db_path = tmp_path / "History"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE urls (id INTEGER, url TEXT, title TEXT, "
+            "last_visit_time INTEGER, visit_count INTEGER)"
+        )
+        # Chrome epoch: microseconds since 1601-01-01
+        CHROME_EPOCH = datetime(1601, 1, 1)
+        ts = int((datetime(2024, 6, 1) - CHROME_EPOCH).total_seconds() * 1_000_000)
+        conn.execute("INSERT INTO urls VALUES (1, 'https://example.com', 'Example', ?, 3)", [ts])
+        conn.commit()
+        conn.close()
+
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_history()
+        assert "example.com" in result
+        assert "Example" in result
+        assert "2024-06-01" in result
+
+    async def test_search_filter(self, tmp_path):
+        import sqlite3
+        db_path = tmp_path / "History"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE urls (id INTEGER, url TEXT, title TEXT, "
+            "last_visit_time INTEGER, visit_count INTEGER)"
+        )
+        conn.execute("INSERT INTO urls VALUES (1, 'https://github.com', 'GitHub', 1000, 5)")
+        conn.execute("INSERT INTO urls VALUES (2, 'https://example.com', 'Example', 999, 1)")
+        conn.commit()
+        conn.close()
+
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_history(search="github")
+        assert "github.com" in result
+        assert "example.com" not in result
+
+    async def test_limit_respected(self, tmp_path):
+        import sqlite3
+        db_path = tmp_path / "History"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE urls (id INTEGER, url TEXT, title TEXT, "
+            "last_visit_time INTEGER, visit_count INTEGER)"
+        )
+        for i in range(10):
+            conn.execute(f"INSERT INTO urls VALUES ({i}, 'https://site{i}.com', 'Site{i}', {i}, 1)")
+        conn.commit()
+        conn.close()
+
+        b = self._make_browser(profile_path=tmp_path)
+        result = await b.get_history(limit=3)
+        assert "Showing 3" in result
+
+
 # ── BrowserAction schema ──────────────────────────────────────────────────────
 
 class TestBrowserAction:
@@ -392,7 +548,7 @@ class TestDataclasses:
 
 class TestToolSchemas:
     def test_base_count(self):
-        assert len(BrowserToolkit.BASE_TOOLS) == 30
+        assert len(BrowserToolkit.BASE_TOOLS) == 32
 
     def test_all_have_required_keys(self):
         tk = BrowserToolkit(_FakeBrowser())
@@ -412,6 +568,7 @@ class TestToolSchemas:
             "get_element_attribute", "handle_dialog",
             "drag_and_drop", "take_element_screenshot",
             "switch_frame", "set_geolocation", "export_pdf",
+            "get_bookmarks", "get_history",
         }
 
 
@@ -426,7 +583,7 @@ class TestToolsAllowlist:
 
     def test_none_means_all_tools(self):
         tk = BrowserToolkit(_FakeBrowser(), tools=None)
-        assert len(tk.as_anthropic_tools()) == 30
+        assert len(tk.as_anthropic_tools()) == 32
 
     def test_invalid_tool_name_raises(self):
         with pytest.raises(ValueError, match="Unknown tool"):
@@ -462,7 +619,7 @@ class TestAdapters:
     def test_anthropic_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 30
+        assert len(tools) == 32
         for t in tools:
             assert "name" in t
             assert "description" in t
@@ -471,7 +628,7 @@ class TestAdapters:
     def test_openai_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_openai_tools()
-        assert len(tools) == 30
+        assert len(tools) == 32
         for t in tools:
             assert t["type"] == "function"
             assert "name" in t["function"]
@@ -483,12 +640,12 @@ class TestAdapters:
         tools = tk.as_google_tools()
         assert len(tools) == 1
         decls = tools[0]["function_declarations"]
-        assert len(decls) == 30
+        assert len(decls) == 32
 
     def test_bedrock_format(self):
         tk = BrowserToolkit(_FakeBrowser())
         tools = tk.as_bedrock_tools()
-        assert len(tools) == 30
+        assert len(tools) == 32
         for t in tools:
             assert "toolSpec" in t
             assert "name" in t["toolSpec"]
@@ -498,26 +655,26 @@ class TestAdapters:
 # ── HITL / CAPTCHA tool inclusion ─────────────────────────────────────────────
 
 class TestOptionalTools:
-    def test_no_callbacks_gives_30_tools(self):
+    def test_no_callbacks_gives_32_tools(self):
         tk = BrowserToolkit(_FakeBrowser())
-        assert len(tk.get_tools()) == 30
-        assert len(tk.as_anthropic_tools()) == 30
+        assert len(tk.get_tools()) == 32
+        assert len(tk.as_anthropic_tools()) == 32
 
     def test_captcha_callback_adds_solve_captcha(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha())
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 31
+        assert len(tools) == 33
         assert any(t["name"] == "solve_captcha" for t in tools)
 
     def test_hitl_callback_adds_request_human_help(self):
         tk = BrowserToolkit(_FakeBrowser(), on_human_needed=_fake_hitl)
         tools = tk.as_anthropic_tools()
-        assert len(tools) == 31
+        assert len(tools) == 33
         assert any(t["name"] == "request_human_help" for t in tools)
 
-    def test_both_callbacks_give_32_tools(self):
+    def test_both_callbacks_give_34_tools(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha(), on_human_needed=_fake_hitl)
-        assert len(tk.as_anthropic_tools()) == 32
+        assert len(tk.as_anthropic_tools()) == 34
 
     def test_captcha_tool_in_all_adapters(self):
         tk = BrowserToolkit(_FakeBrowserWithCaptcha())

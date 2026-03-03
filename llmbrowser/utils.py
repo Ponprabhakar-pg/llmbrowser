@@ -60,7 +60,14 @@ def find_chrome_binary() -> Optional[str]:
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
         ]
-        path_names = ["google-chrome", "chromium", "chromium-browser"]
+        path_names = [
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "microsoft-edge",
+            "microsoft-edge-stable",
+        ]
     elif sys.platform == "win32":
         import os
         pf   = os.environ.get("PROGRAMFILES", r"C:\Program Files")

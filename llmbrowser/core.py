@@ -511,6 +511,10 @@ class LLMBrowser:
         # Subprocess owned by attach() — terminated on close()
         self._subprocess = None
 
+        # Profile directory set by attach() / connect_or_attach() when user_data_dir
+        # is provided. Used by get_bookmarks() and get_history().
+        self._profile_path: Optional[Path] = None
+
     # ------------------------------------------------------------------
     # _page property — always points to the currently active tab
     # ------------------------------------------------------------------
@@ -568,18 +572,71 @@ class LLMBrowser:
                 self._remote_cdp_url
             )
             logger.info("Connected to remote browser via CDP: %s", self._remote_cdp_url)
-        else:
-            # ── Local browser launch ────────────────────────────────────────
-            self._browser = await self._launch_browser()
+
+            # Reuse the existing browser context so that the real profile's
+            # cookies, localStorage, and active sessions are visible.
+            # Creating a new_context() would produce an empty context that
+            # bypasses all saved logins — which is almost never what you want
+            # when attaching to a real user profile.
+            existing_contexts = self._browser.contexts
+            if existing_contexts:
+                # Prefer the context that has real HTTP/HTTPS pages loaded —
+                # it is most likely the user-facing window with live sessions.
+                # Fall back to the context with the most pages, then index 0.
+                def _ctx_score(ctx):
+                    pages = ctx.pages
+                    http_pages = sum(
+                        1 for p in pages
+                        if p.url.startswith(("http://", "https://"))
+                    )
+                    return (http_pages, len(pages))
+
+                self._context = max(existing_contexts, key=_ctx_score)
+                logger.info(
+                    "Reusing existing browser context with %d page(s) "
+                    "(profile sessions preserved).",
+                    len(self._context.pages),
+                )
+            else:
+                self._context = await self._browser.new_context(
+                    viewport=self._viewport,
+                    user_agent=self._user_agent,
+                    java_script_enabled=True,
+                )
+                logger.info("No existing context found — created a fresh one.")
+
+            if self._stealth:
+                await self._context.add_init_script(_STEALTH_JS)
+                logger.info("Stealth mode enabled.")
+
+            # Prefer a page with a real HTTP/HTTPS URL; fall back to the first
+            # available page or open a new one.
+            existing_pages = self._context.pages
+            if existing_pages:
+                http_pages = [
+                    p for p in existing_pages
+                    if p.url.startswith(("http://", "https://"))
+                ]
+                page = http_pages[0] if http_pages else existing_pages[0]
+                logger.info("Reusing existing page: %s", page.url)
+            else:
+                page = await self._context.new_page()
+
+            self._setup_page(page)
+            self._pages      = [page]
+            self._active_idx = 0
+            logger.info("Remote browser session ready.")
+            return
+
+        # ── Local browser launch ────────────────────────────────────────────
+        self._browser = await self._launch_browser()
 
         ctx_kwargs: dict = dict(
             viewport=self._viewport,
             user_agent=self._user_agent,
             java_script_enabled=True,
         )
-        # Proxy only applies to local launches; remote browsers control their
-        # own network routing (already warned in __init__ if both were set).
-        if self._proxy and not self._remote_cdp_url:
+        if self._proxy:
             ctx_kwargs["proxy"] = self._proxy
         if self._session_file and Path(self._session_file).exists():
             ctx_kwargs["storage_state"] = self._session_file
@@ -592,11 +649,7 @@ class LLMBrowser:
         self._setup_page(page)
         self._pages      = [page]
         self._active_idx = 0
-
-        if self._remote_cdp_url:
-            logger.info("Remote browser session ready.")
-        else:
-            logger.info("Browser started: %s (headless=%s)", self._browser_type, self._headless)
+        logger.info("Browser started: %s (headless=%s)", self._browser_type, self._headless)
 
     async def _launch_browser(self) -> Browser:
         """
@@ -654,20 +707,43 @@ class LLMBrowser:
 
     async def close(self) -> None:
         """Cleanly shut down the browser and Playwright."""
+        # Close Playwright objects first so CDP connections are released
+        # before we terminate the subprocess that owns the browser process.
         try:
             if self._context:
                 await self._context.close()
+        except Exception as e:
+            logger.warning("Error closing browser context: %s", e)
+
+        try:
             if self._browser:
                 await self._browser.close()
+        except Exception as e:
+            logger.warning("Error closing browser: %s", e)
+
+        try:
             if self._playwright:
                 await self._playwright.stop()
-            self._pages.clear()
-            if self._subprocess is not None:
-                self._subprocess.terminate()
-                logger.info("Attached browser subprocess terminated.")
-            logger.info("Browser closed.")
         except Exception as e:
-            logger.warning("Error during browser close: %s", e)
+            logger.warning("Error stopping Playwright: %s", e)
+
+        self._pages.clear()
+
+        # Terminate the subprocess AFTER Playwright has released the CDP
+        # connection; otherwise the process receives SIGTERM while Playwright
+        # is still draining its WebSocket, which causes noisy error logs.
+        if self._subprocess is not None:
+            try:
+                self._subprocess.terminate()
+                try:
+                    self._subprocess.wait(timeout=3)
+                except Exception:
+                    self._subprocess.kill()
+                logger.info("Attached browser subprocess terminated.")
+            except Exception as e:
+                logger.warning("Error terminating browser subprocess: %s", e)
+
+        logger.info("Browser closed.")
 
     async def __aenter__(self):
         await self._start()
@@ -744,7 +820,8 @@ class LLMBrowser:
         cls,
         port: int = 9222,
         binary: Optional[str] = None,
-        profile_dir: Optional[str] = None,
+        user_data_dir: Optional[str] = None,
+        profile: str = "Default",
         headless: bool = False,
         **kwargs,
     ) -> "LLMBrowser":
@@ -756,30 +833,38 @@ class LLMBrowser:
         automatically terminated when ``close()`` / ``async with`` exits.
 
         Args:
-            port:        CDP port to open on the launched browser (default 9222).
-            binary:      Explicit path to the Chrome/Edge executable.
-                         Auto-detected from standard installation paths if None.
-            profile_dir: Path to a Chrome ``--user-data-dir`` directory.
-                         Use your real profile (e.g. ``~/Library/Application Support/Google/Chrome``)
-                         to inherit saved logins and cookies.
-                         A fresh temporary profile is created when None.
-            headless:    Run the launched browser in headless mode (default False).
-            **kwargs:    Forwarded to ``LLMBrowser()`` — e.g. ``stealth=True``,
-                         ``timeout=60_000``.  ``browser=``, ``slow_mo=``, and
-                         ``proxy=`` are ignored (CDP connection controls networking).
+            port:          CDP port to open on the launched browser (default 9222).
+            binary:        Explicit path to the Chrome/Edge executable.
+                           Auto-detected from standard installation paths if None.
+            user_data_dir: Root directory that contains all browser profiles.
+                           Maps to Chrome's ``--user-data-dir`` flag.
+                           Examples:
+                             Chrome  — ``~/Library/Application Support/Google/Chrome``
+                             Brave   — ``~/Library/Application Support/BraveSoftware/Brave-Browser``
+                             Edge    — ``~/Library/Application Support/Microsoft Edge``
+                           A fresh temporary directory is created when None.
+            profile:       Name of the profile sub-folder inside ``user_data_dir``
+                           (default ``"Default"``).  Maps to ``--profile-directory``.
+                           Open ``brave://version`` or ``chrome://version`` and look at
+                           **Profile Path** to find the exact name for your profile.
+            headless:      Run the launched browser in headless mode (default False).
+            **kwargs:      Forwarded to ``LLMBrowser()`` — e.g. ``stealth=True``,
+                           ``timeout=60_000``.  ``browser=``, ``slow_mo=``, and
+                           ``proxy=`` are ignored (CDP connection controls networking).
 
         Usage::
 
-            # Attach with a fresh profile (no window shown by default)
+            # Attach with a fresh temporary profile
             async with await LLMBrowser.attach() as b:
                 await b.navigate("https://example.com")
-                state = await b.get_state()
 
-            # Use your real logged-in Chrome profile
+            # Use your real signed-in Brave profile
             async with await LLMBrowser.attach(
-                profile_dir="~/Library/Application Support/Google/Chrome"
+                binary="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                user_data_dir="~/Library/Application Support/BraveSoftware/Brave-Browser",
+                profile="Default",
             ) as b:
-                ...
+                await b.navigate("https://linkedin.com")
         """
         import subprocess as _sp
         import tempfile
@@ -797,12 +882,14 @@ class LLMBrowser:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-extensions",
+            "--no-restore-state",       # don't reopen previous tabs/windows
         ]
         if headless:
             cmd.append("--headless=new")
 
-        if profile_dir:
-            cmd.append(f"--user-data-dir={Path(profile_dir).expanduser()}")
+        if user_data_dir:
+            cmd.append(f"--user-data-dir={Path(user_data_dir).expanduser()}")
+            cmd.append(f"--profile-directory={profile}")
         else:
             tmp_dir = tempfile.mkdtemp(prefix="llmbrowser_attach_")
             cmd.append(f"--user-data-dir={tmp_dir}")
@@ -818,8 +905,77 @@ class LLMBrowser:
 
         instance = cls(remote_cdp_url=ws_url, **kwargs)
         instance._subprocess = proc
+        if user_data_dir:
+            instance._profile_path = Path(user_data_dir).expanduser() / profile
         await instance._start()
         return instance
+
+    @classmethod
+    async def connect_or_attach(
+        cls,
+        port: int = 9222,
+        binary: Optional[str] = None,
+        user_data_dir: Optional[str] = None,
+        profile: str = "Default",
+        headless: bool = False,
+        **kwargs,
+    ) -> "LLMBrowser":
+        """
+        Connect to an already-running browser with CDP if available, otherwise
+        launch a new one via ``attach()``.
+
+        This is the recommended entry point when you want to reuse an open
+        browser window across multiple script runs without disrupting it.
+
+        Behaviour:
+          1. Tries ``find_browser(port)`` — if a browser is already listening
+             on that port (e.g. launched manually or by a previous run), it
+             connects directly. No new window, no lost tabs.
+          2. If nothing is found, falls back to ``attach()`` which launches
+             the system browser with ``--remote-debugging-port``.
+
+        To keep your browser open between runs, launch it once manually::
+
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \\
+              --remote-debugging-port=9222 \\
+              --profile-directory=Default
+
+        Then every call to ``connect_or_attach()`` will reuse that window.
+
+        Args:
+            port:          CDP port to check / open (default 9222).
+            binary:        Browser binary path — used only when launching.
+            user_data_dir: User data directory — used only when launching.
+            profile:       Profile name inside ``user_data_dir`` (default ``"Default"``).
+            headless:      Headless mode — used only when launching.
+            **kwargs:      Forwarded to ``LLMBrowser()``.
+
+        Usage::
+
+            async with await LLMBrowser.connect_or_attach(
+                binary="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                user_data_dir="~/Library/Application Support/BraveSoftware/Brave-Browser",
+            ) as browser:
+                await browser.navigate("https://linkedin.com")
+        """
+        try:
+            ws_url = await cls.find_browser(port=port)
+            logger.info("Found existing browser on port %d — connecting without relaunch.", port)
+            instance = cls(remote_cdp_url=ws_url, **kwargs)
+            if user_data_dir:
+                instance._profile_path = Path(user_data_dir).expanduser() / profile
+            await instance._start()
+            return instance
+        except RuntimeError:
+            logger.info("No browser found on port %d — launching via attach().", port)
+            return await cls.attach(
+                port=port,
+                binary=binary,
+                user_data_dir=user_data_dir,
+                profile=profile,
+                headless=headless,
+                **kwargs,
+            )
 
     # ------------------------------------------------------------------
     # Session persistence
@@ -1751,3 +1907,147 @@ class LLMBrowser:
         await self._page.pdf(path=path)
         logger.info("PDF exported to %s", path)
         return path
+
+    async def get_bookmarks(self, folder: Optional[str] = None) -> str:
+        """
+        Read bookmarks from the connected browser profile.
+
+        Parses the Bookmarks JSON file from the profile directory. Available
+        only when connected via ``attach()`` or ``connect_or_attach()`` with
+        ``user_data_dir`` set.
+
+        Args:
+            folder: Optional folder name filter (case-insensitive substring match).
+                    Returns all bookmarks when None.
+
+        Returns:
+            Formatted string listing each bookmark's title, URL, and folder path.
+        """
+        _NOT_AVAILABLE = (
+            "Bookmarks not available — connect via attach() or connect_or_attach() "
+            "with user_data_dir= set to enable this feature."
+        )
+        if self._profile_path is None:
+            return _NOT_AVAILABLE
+
+        bookmarks_file = self._profile_path / "Bookmarks"
+        if not bookmarks_file.exists():
+            return f"Bookmarks file not found at: {bookmarks_file}"
+
+        data = json.loads(bookmarks_file.read_text(encoding="utf-8"))
+
+        results: list[dict] = []
+
+        def _walk(node: dict, path: str = "") -> None:
+            if node.get("type") == "url":
+                results.append({
+                    "title":  node.get("name", ""),
+                    "url":    node.get("url", ""),
+                    "folder": path,
+                })
+            elif node.get("type") == "folder":
+                name     = node.get("name", "")
+                new_path = f"{path}/{name}" if path else name
+                for child in node.get("children", []):
+                    _walk(child, new_path)
+
+        for root_node in data.get("roots", {}).values():
+            _walk(root_node)
+
+        if folder:
+            results = [r for r in results if folder.lower() in r["folder"].lower()]
+
+        if not results:
+            return "No bookmarks found." + (f" (filter: '{folder}')" if folder else "")
+
+        lines = [f"Found {len(results)} bookmark(s):\n"]
+        for i, r in enumerate(results, 1):
+            lines.append(f"{i}. {r['title'] or '(no title)'}")
+            lines.append(f"   URL: {r['url']}")
+            if r["folder"]:
+                lines.append(f"   Folder: {r['folder']}")
+        return "\n".join(lines)
+
+    async def get_history(self, limit: int = 50, search: Optional[str] = None) -> str:
+        """
+        Read recent browser history from the connected profile.
+
+        Copies the History SQLite database to a temporary file (to avoid
+        locking the live browser file) and queries the most recent visits.
+        Available only when connected via ``attach()`` or ``connect_or_attach()``
+        with ``user_data_dir`` set.
+
+        Args:
+            limit:  Maximum number of entries to return (default 50, max 500).
+            search: Optional substring to filter results by URL or page title.
+
+        Returns:
+            Formatted string listing each entry's title, URL, last visit time,
+            and visit count.
+        """
+        import shutil
+        import sqlite3
+        import tempfile
+        from datetime import datetime, timedelta
+
+        _NOT_AVAILABLE = (
+            "History not available — connect via attach() or connect_or_attach() "
+            "with user_data_dir= set to enable this feature."
+        )
+        if self._profile_path is None:
+            return _NOT_AVAILABLE
+
+        history_file = self._profile_path / "History"
+        if not history_file.exists():
+            return f"History file not found at: {history_file}"
+
+        limit = max(1, min(limit, 500))
+
+        # Copy to a temp file — the live History file is locked by the browser
+        tmp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+                tmp_path = tmp.name
+            shutil.copy2(str(history_file), tmp_path)
+
+            conn = sqlite3.connect(tmp_path)
+            conn.row_factory = sqlite3.Row
+
+            if search:
+                query = (
+                    "SELECT url, title, last_visit_time, visit_count FROM urls "
+                    "WHERE url LIKE ? OR title LIKE ? "
+                    "ORDER BY last_visit_time DESC LIMIT ?"
+                )
+                rows = conn.execute(query, [f"%{search}%", f"%{search}%", limit]).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT url, title, last_visit_time, visit_count FROM urls "
+                    "ORDER BY last_visit_time DESC LIMIT ?",
+                    [limit],
+                ).fetchall()
+            conn.close()
+        finally:
+            if tmp_path:
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        if not rows:
+            return "No history found." + (f" (search: '{search}')" if search else "")
+
+        # Chrome stores timestamps as microseconds since 1601-01-01
+        CHROME_EPOCH = datetime(1601, 1, 1)
+        lines = [f"Showing {len(rows)} history entry/entries:\n"]
+        for i, row in enumerate(rows, 1):
+            title = row["title"] or row["url"]
+            try:
+                visited = CHROME_EPOCH + timedelta(microseconds=row["last_visit_time"])
+                visited_str = visited.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                visited_str = "unknown"
+            lines.append(f"{i}. {title}")
+            lines.append(f"   URL: {row['url']}")
+            lines.append(f"   Last visited: {visited_str}  |  Visits: {row['visit_count']}")
+        return "\n".join(lines)
